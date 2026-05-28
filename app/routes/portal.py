@@ -27,6 +27,7 @@ async def portal(request: Request):
     # proyecto. Las vigencias de PERSONAL (Fase 4.2) si seran por proyecto.
     stats = db_rrhh.stats_compliance()
     stats_personal = db_rrhh.stats_personal()
+    stats_armeria = db_rrhh.stats_armeria()
     vencimientos = db_rrhh.vencimientos_proximos(dias_horizonte=90)
 
     # Semaforo global. Distingue documentos vencidos (modalidad/fianza) de
@@ -75,6 +76,7 @@ async def portal(request: Request):
             'proyecto_activo': proyecto,
             'stats': stats,
             'stats_personal': stats_personal,
+            'stats_armeria': stats_armeria,
             'vencimientos': vencimientos[:10],  # top 10
             'vencimientos_total': len(vencimientos),
             'semaforo': semaforo,

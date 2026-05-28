@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% block title %}{{ arma.marca }} {{ arma.modelo }} · Armería{% endblock %}
+{% block content %}
+
+<a href="/armeria" style="font-size:.85rem">← Volver a la armería</a>
+
+<div class="flex-between" style="margin:14px 0 4px;flex-wrap:wrap;gap:12px">
+    <div>
+        <h1 style="margin:0">{{ arma.marca or 'Arma' }} {{ arma.modelo or '' }}</h1>
+        <p class="subtitle" style="margin:4px 0 0">
+            {% if arma.tpa %}TPA {{ arma.tpa }} · {% endif %}
+            {% if arma.serie %}serie {{ arma.serie }} · {% endif %}
+            {{ arma.calibre or 'calibre s/d' }}
+            {% if arma.estado == 'operativa' %} · <span style="color:var(--success)">operativa</span>
+            {% elif arma.estado == 'mantenimiento' %} · <span style="color:var(--warning)">mantenimiento</span>
+            {% else %} · <span style="color:var(--danger)">{{ arma.estado }}</span>{% endif %}
+        </p>
+    </div>
+</div>
+
+{% if error %}<div class="alert alert-error"><i class="fa-solid fa-triangle-exclamation"></i> {{ error }}</div>{% endif %}
+{% if ok %}<div class="alert alert-ok"><i class="fa-solid fa-circle-check"></i> {{ ok }}</div>{% endif %}
+
+{# ── Estado de asignación ── #}
+{% if asignacion %}
+<div class="card" style="border-left:4px solid var(--accent-cool)">
+    <div class="flex-between" style="flex-wrap:wrap;gap:12px">
+        <div>
+            <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">Actualmente asignada a</div>
+            <div style="font-size:1.15rem;font-weight:800;margin-top:4px"><i class="fa-solid fa-user"></i> {{ asignacion.nombre_completo }} <span class="mono" style="font-weight:400;font-size:.85rem">(DNI {{ asignacion.dni }})</span></div>
+            <div style="font-size:.82rem;color:var(--text-muted);margin-top:2px">
+                Desde {{ asignacion.fecha_salida.strftime('%d/%m/%Y %H:%M') }}
+                {% if asignacion.puesto %} · puesto: {{ asignacion.puesto }}{% endif %}
+                {% if asignacion.municion_entregada %} · {{ asignacion.municion_entregada }} municiones{% endif %}
+            </div>
+        </div>
+    </div>
+    <form method="post" action="/armeria/{{ arma.id }}/devolver" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="asignacion_id" value="{{ asignacion.id }}">
+        <div class="form-row">
+            <div class="form-group"><label>Munición devuelta</label><input type="number" name="municion_devuelta" min="0"></div>
+            <div class="form-group"><label>Observaciones del retorno</label><input type="text" name="observaciones"></div>
+        </div>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-rotate-left"></i> Registrar devolución</button>
+    </form>
+</div>
+{% elif arma.estado == 'operativa' %}
+<div class="card">
+    <h3 style="margin:0 0 12px"><i class="fa-solid fa-hand-holding"></i> Asignar arma</h3>
+    <form method="post" action="/armeria/{{ arma.id }}/asignar">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Vigilante *</label>
+                <select name="dni" required>
+                    <option value="">— Seleccionar —</option>
+                    {% for t in personal %}
+                    <option value="{{ t.dni }}">
+                        {{ t.nombre_completo }}
+                        {% if t._hab.estado == HAB_HABILITADO %}✅ habilitado
+                        {% elif t._hab.estado == HAB_ATENCION %}🟡 atención
+                        {% else %}⛔ NO habilitado{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group"><label>Puesto</label><input type="text" name="puesto" placeholder="Ej: Garita principal"></div>
+            <div class="form-group"><label>Munición entregada</label><input type="number" name="municion_entregada" min="0"></div>
+        </div>
+        <div class="form-group"><label>Observaciones</label><input type="text" name="observaciones"></div>
+        <p class="text-muted" style="font-size:.8rem;margin:0 0 14px">
+            <i class="fa-solid fa-shield-halved"></i> El sistema bloqueará la entrega si el vigilante NO está habilitado (vigencias SUCAMEC vencidas o faltantes).
+        </p>
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-hand-holding"></i> Asignar y registrar en libro</button>
+    </form>
+</div>
+{% else %}
+<div class="alert alert-error">
+    <i class="fa-solid fa-ban"></i> El arma no está operativa ({{ arma.estado }}). No puede asignarse.
+</div>
+{% endif %}
+
+{# ── Libro de armas de esta arma ── #}
+<h2><i class="fa-solid fa-book"></i> Historial (libro de armas)</h2>
+{% if historial %}
+<div class="card" style="padding:0;overflow:hidden">
+    <table>
+        <thead><tr><th>Salida</th><th>Vigilante</th><th>Puesto</th><th>Retorno</th><th>Munición</th></tr></thead>
+        <tbody>
+            {% for h in historial %}
+            <tr>
+                <td class="mono">{{ h.fecha_salida.strftime('%d/%m/%Y %H:%M') }}</td>
+                <td>{{ h.nombre_completo or h.dni }}</td>
+                <td>{{ h.puesto or '—' }}</td>
+                <td class="mono">{% if h.fecha_retorno %}{{ h.fecha_retorno.strftime('%d/%m/%Y %H:%M') }}{% else %}<span class="badge badge-warn">en uso</span>{% endif %}</td>
+                <td class="mono">{{ h.municion_entregada or 0 }}{% if h.municion_devuelta is not none %} / {{ h.municion_devuelta }}{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card text-muted" style="text-align:center;padding:22px">Sin movimientos registrados aún.</div>
+{% endif %}
+
+{# ── Editar arma ── #}
+<h2 style="margin-top:30px"><i class="fa-solid fa-pen"></i> Editar arma</h2>
+<form method="post" action="/armeria/{{ arma.id }}/editar" class="card">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+    <div class="form-row">
+        <div class="form-group"><label>TPA</label><input type="text" name="tpa" value="{{ arma.tpa or '' }}"></div>
+        <div class="form-group"><label>Serie</label><input type="text" name="serie" value="{{ arma.serie or '' }}"></div>
+        <div class="form-group">
+            <label>Estado</label>
+            <select name="estado">
+                {% for cod, nom in estados %}<option value="{{ cod }}" {% if arma.estado == cod %}selected{% endif %}>{{ nom }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group"><label>Marca</label><input type="text" name="marca" value="{{ arma.marca or '' }}"></div>
+        <div class="form-group"><label>Modelo</label><input type="text" name="modelo" value="{{ arma.modelo or '' }}"></div>
+        <div class="form-group">
+            <label>Calibre</label>
+            <select name="calibre">
+                <option value="">—</option>
+                {% for c in calibres %}<option value="{{ c }}" {% if arma.calibre == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group"><label>Año</label><input type="number" name="anio" value="{{ arma.anio or '' }}"></div>
+        <div class="form-group"><label>Fecha adquisición</label><input type="date" name="fecha_adquisicion" value="{{ arma.fecha_adquisicion.strftime('%Y-%m-%d') if arma.fecha_adquisicion else '' }}"></div>
+        <div class="form-group">
+            <label>Polvorín</label>
+            <select name="polvorin_id">
+                <option value="">—</option>
+                {% for p in polvorines %}<option value="{{ p.id }}" {% if arma.polvorin_id == p.id %}selected{% endif %}>{{ p.nombre }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="form-group"><label>Observaciones</label><textarea name="observaciones" rows="2">{{ arma.observaciones or '' }}</textarea></div>
+    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar cambios</button>
+</form>
+
+{% endblock %}

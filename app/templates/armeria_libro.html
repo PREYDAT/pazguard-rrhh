@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}Libro de armas · PAZGUARD RRHH{% endblock %}
+{% block content %}
+
+<a href="/armeria" style="font-size:.85rem">← Volver a la armería</a>
+<h1 style="margin-top:14px">Libro de armas</h1>
+<p class="subtitle">Registro cronológico de salidas y retornos (trazabilidad SUCAMEC)</p>
+
+{% if movimientos %}
+<div class="card" style="padding:0;overflow:hidden">
+    <table>
+        <thead><tr><th>Fecha salida</th><th>Arma</th><th>Vigilante</th><th>Puesto</th><th>Retorno</th></tr></thead>
+        <tbody>
+            {% for h in movimientos %}
+            <tr>
+                <td class="mono">{{ h.fecha_salida.strftime('%d/%m/%Y %H:%M') }}</td>
+                <td>{{ h.marca or '' }} {{ h.modelo or '' }} <span class="mono text-muted">{{ h.serie or h.tpa or '' }}</span></td>
+                <td>{{ h.nombre_completo or h.dni }}</td>
+                <td>{{ h.puesto or '—' }}</td>
+                <td class="mono">{% if h.fecha_retorno %}{{ h.fecha_retorno.strftime('%d/%m/%Y %H:%M') }}{% else %}<span class="badge badge-warn">en uso</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<p class="text-muted" style="font-size:.8rem;margin-top:12px"><i class="fa-solid fa-circle-info"></i> Mostrando últimos {{ movimientos|length }} movimientos.</p>
+{% else %}
+<div class="card text-muted" style="text-align:center;padding:36px">Aún no hay movimientos de armas registrados.</div>
+{% endif %}
+
+{% endblock %}

@@ -94,6 +94,22 @@
         {% endif %}
     </a>
 
+    <a href="/armeria" class="card" style="text-decoration:none;color:inherit">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+            <div>
+                <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">Armería</div>
+                <div style="font-size:2rem;font-weight:800;color:var(--accent);margin-top:6px">{{ stats_armeria.operativas }}<span style="font-size:1rem;color:var(--text-muted)">/{{ stats_armeria.total }}</span></div>
+                <div style="font-size:.85rem;color:var(--text-soft)">operativas</div>
+            </div>
+            <i class="fa-solid fa-gun" style="font-size:1.8rem;color:var(--accent)"></i>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px;font-size:.78rem;flex-wrap:wrap">
+            {% if stats_armeria.asignadas > 0 %}<span class="badge">{{ stats_armeria.asignadas }} asignadas</span>{% endif %}
+            {% if stats_armeria.fuera > 0 %}<span class="badge badge-danger">{{ stats_armeria.fuera }} baja/pérdida</span>{% endif %}
+            <span class="badge badge-success">{{ stats_armeria.municion_saldo }} municiones</span>
+        </div>
+    </a>
+
     <div class="card">
         <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">UIT {{ anio_uit }}</div>
         <div style="font-size:1.7rem;font-weight:800;color:var(--accent);margin-top:6px">S/ {{ '{:,.0f}'.format(uit_vigente) }}</div>
@@ -123,6 +139,8 @@
                     <i class="fa-solid fa-shield-halved" style="color:var(--accent)"></i> Modalidad
                     {% elif v.tipo == 'fianza' %}
                     <i class="fa-solid fa-file-shield" style="color:var(--accent-warm)"></i> Fianza
+                    {% elif v.tipo == 'polvorin' %}
+                    <i class="fa-solid fa-warehouse" style="color:var(--accent)"></i> Polvorín
                     {% else %}
                     <i class="fa-solid fa-id-card" style="color:var(--accent-cool)"></i> Personal
                     {% endif %}
@@ -147,6 +165,8 @@
                     <a href="/modalidades/{{ v.id }}" class="btn btn-sm">Ver</a>
                     {% elif v.tipo == 'fianza' %}
                     <a href="/cartas-fianza/{{ v.id }}" class="btn btn-sm">Ver</a>
+                    {% elif v.tipo == 'polvorin' %}
+                    <a href="/armeria/polvorines" class="btn btn-sm">Ver</a>
                     {% else %}
                     <a href="/personal/{{ v.dni }}" class="btn btn-sm">Ver</a>
                     {% endif %}
@@ -182,6 +202,9 @@
     </a>
     <a href="/personal" class="btn">
         <i class="fa-solid fa-users"></i> Ver personal
+    </a>
+    <a href="/armeria" class="btn">
+        <i class="fa-solid fa-gun"></i> Armería
     </a>
     <a href="/modalidades" class="btn">
         <i class="fa-solid fa-list"></i> Ver modalidades

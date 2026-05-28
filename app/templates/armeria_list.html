@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block title %}Armería SUCAMEC · PAZGUARD RRHH{% endblock %}
+{% block content %}
+
+<div class="flex-between" style="margin-bottom:18px">
+    <div>
+        <h1>Armería SUCAMEC</h1>
+        <p class="subtitle">Inventario de armas, asignación nominal y libro de armas (DL 1127)</p>
+    </div>
+    <div style="display:flex;gap:8px">
+        <a href="/armeria/libro" class="btn"><i class="fa-solid fa-book"></i> Libro de armas</a>
+        <a href="/armeria/municion" class="btn"><i class="fa-solid fa-boxes-stacked"></i> Munición</a>
+        <a href="/armeria/polvorines" class="btn"><i class="fa-solid fa-warehouse"></i> Polvorines</a>
+        <a href="/armeria/nueva" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Nueva arma</a>
+    </div>
+</div>
+
+{% if error %}<div class="alert alert-error"><i class="fa-solid fa-triangle-exclamation"></i> {{ error }}</div>{% endif %}
+{% if ok %}<div class="alert alert-ok"><i class="fa-solid fa-circle-check"></i> {{ ok }}</div>{% endif %}
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:22px">
+    <div class="card" style="margin:0"><div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;font-weight:700">Total</div><div style="font-size:1.8rem;font-weight:800;color:var(--accent)">{{ stats.total }}</div></div>
+    <div class="card" style="margin:0"><div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;font-weight:700">Operativas</div><div style="font-size:1.8rem;font-weight:800;color:var(--success)">{{ stats.operativas }}</div></div>
+    <div class="card" style="margin:0"><div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;font-weight:700">Asignadas</div><div style="font-size:1.8rem;font-weight:800;color:var(--accent-cool)">{{ stats.asignadas }}</div></div>
+    <div class="card" style="margin:0"><div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;font-weight:700">Mantenim.</div><div style="font-size:1.8rem;font-weight:800;color:var(--warning)">{{ stats.mantenimiento }}</div></div>
+    <div class="card" style="margin:0"><div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;font-weight:700">Baja/pérdida</div><div style="font-size:1.8rem;font-weight:800;color:var(--danger)">{{ stats.fuera }}</div></div>
+</div>
+
+{% if armas %}
+<div class="card" style="padding:0;overflow:hidden">
+    <table>
+        <thead><tr><th>TPA</th><th>Arma</th><th>Calibre</th><th>Serie</th><th>Estado</th><th>Asignada a</th><th></th></tr></thead>
+        <tbody>
+            {% for a in armas %}
+            <tr>
+                <td class="mono">{{ a.tpa or '—' }}</td>
+                <td><strong>{{ a.marca or '' }} {{ a.modelo or '' }}</strong></td>
+                <td>{{ a.calibre or '—' }}</td>
+                <td class="mono">{{ a.serie or '—' }}</td>
+                <td>
+                    {% if a.estado == 'operativa' %}<span class="badge badge-success">operativa</span>
+                    {% elif a.estado == 'mantenimiento' %}<span class="badge badge-warn">mantenimiento</span>
+                    {% else %}<span class="badge badge-danger">{{ a.estado }}</span>{% endif %}
+                </td>
+                <td>
+                    {% if a.asignada_a %}<i class="fa-solid fa-user" style="color:var(--accent-cool)"></i> {{ a.asignada_a }}
+                    {% else %}<span class="text-muted">en armería</span>{% endif %}
+                </td>
+                <td><a href="/armeria/{{ a.id }}" class="btn btn-sm">Ver</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:36px 22px">
+    <i class="fa-solid fa-gun" style="font-size:48px;color:var(--text-muted);margin-bottom:14px"></i>
+    <h3 style="margin:0 0 6px">Sin armas registradas</h3>
+    <p style="margin:0 0 18px;color:var(--text-muted)">Registra el inventario de armas autorizadas por SUCAMEC.</p>
+    <a href="/armeria/nueva" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Registrar arma</a>
+</div>
+{% endif %}
+
+{% endblock %}

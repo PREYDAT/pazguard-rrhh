@@ -79,6 +79,32 @@ HAB_ATENCION = 'atencion'          # todas presentes pero alguna vence < 60d
 HAB_NO_HABILITADO = 'no_habilitado'  # falta una obligatoria o hay vencida
 
 
+# ── Fase 4.3: Armería SUCAMEC ─────────────────────────────────
+ARMA_ESTADOS = [
+    ('operativa',     'Operativa'),
+    ('mantenimiento', 'En mantenimiento'),
+    ('baja',          'Dada de baja'),
+    ('perdida',       'Pérdida / robo'),
+]
+ARMA_ESTADO_OPERATIVA = 'operativa'
+
+CALIBRES_COMUNES = [
+    '9mm', '.38 Special', '.380', '.40 S&W', '.45 ACP',
+    '12 GA (escopeta)', '5.56mm', '7.62mm', 'Otro',
+]
+
+# Movimientos de munición (afectan el saldo del lote)
+MUNICION_MOV_TIPOS = [
+    ('ingreso',    'Ingreso (compra)',                  +1),
+    ('retorno',    'Retorno a almacén',                 +1),
+    ('asignacion', 'Asignación a servicio',             -1),
+    ('practica',   'Consumo en práctica / polígono',    -1),
+    ('baja',       'Baja (merma / incidente)',          -1),
+]
+MUNICION_MOV_SIGNO = {c: s for c, _, s in MUNICION_MOV_TIPOS}
+MUNICION_MOV_DICT = {c: n for c, n, _ in MUNICION_MOV_TIPOS}
+
+
 def clasificar_habilitacion(faltantes, vencidas, por_vencer) -> str:
     """Función pura (testeable sin DB) que decide el estado de habilitación.
 

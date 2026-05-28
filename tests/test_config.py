@@ -62,3 +62,22 @@ def test_clasificar_habilitacion():
     assert config.clasificar_habilitacion(['Carné SUCAMEC'], [], [{'nombre': 'x'}]) == N
     # hay vencida -> no habilitado
     assert config.clasificar_habilitacion([], [{'nombre': 'y'}], []) == N
+
+
+# ── Fase 4.3: armería ──
+
+def test_arma_estados_y_calibres():
+    codigos = [c for c, _ in config.ARMA_ESTADOS]
+    assert config.ARMA_ESTADO_OPERATIVA == 'operativa'
+    assert 'operativa' in codigos and 'baja' in codigos and 'perdida' in codigos
+    assert '9mm' in config.CALIBRES_COMUNES
+
+
+def test_municion_signos():
+    # ingreso/retorno suman; asignacion/practica/baja restan
+    assert config.MUNICION_MOV_SIGNO['ingreso'] == 1
+    assert config.MUNICION_MOV_SIGNO['retorno'] == 1
+    assert config.MUNICION_MOV_SIGNO['asignacion'] == -1
+    assert config.MUNICION_MOV_SIGNO['practica'] == -1
+    assert config.MUNICION_MOV_SIGNO['baja'] == -1
+    assert config.MUNICION_MOV_DICT['practica'].startswith('Consumo')

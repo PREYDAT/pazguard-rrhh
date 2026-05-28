@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}Nueva arma · PAZGUARD RRHH{% endblock %}
+{% block content %}
+
+<a href="/armeria" style="font-size:.85rem">← Volver a la armería</a>
+<h1 style="margin-top:14px">Nueva arma</h1>
+<p class="subtitle">Registrar un arma del inventario autorizado por SUCAMEC</p>
+
+<form method="post" action="/armeria/nueva" class="card">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+    <div class="form-row">
+        <div class="form-group"><label>TPA (Tarjeta de Propiedad)</label><input type="text" name="tpa" placeholder="N° TPA SUCAMEC"></div>
+        <div class="form-group"><label>N° de serie</label><input type="text" name="serie"></div>
+        <div class="form-group">
+            <label>Estado</label>
+            <select name="estado">
+                {% for cod, nom in estados %}<option value="{{ cod }}">{{ nom }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group"><label>Marca</label><input type="text" name="marca" placeholder="Ej: Glock, Bersa, Pietro Beretta"></div>
+        <div class="form-group"><label>Modelo</label><input type="text" name="modelo"></div>
+        <div class="form-group">
+            <label>Calibre</label>
+            <select name="calibre">
+                <option value="">—</option>
+                {% for c in calibres %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group"><label>Año</label><input type="number" name="anio" min="1900" max="2100"></div>
+        <div class="form-group"><label>Fecha de adquisición</label><input type="date" name="fecha_adquisicion"></div>
+        <div class="form-group">
+            <label>Polvorín</label>
+            <select name="polvorin_id">
+                <option value="">—</option>
+                {% for p in polvorines %}<option value="{{ p.id }}">{{ p.nombre }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="form-group"><label>Observaciones</label><textarea name="observaciones" rows="2"></textarea></div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+        <a href="/armeria" class="btn">Cancelar</a>
+    </div>
+</form>
+
+{% endblock %}

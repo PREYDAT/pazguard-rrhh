@@ -17,6 +17,9 @@ from pazguard_core.db import get_conn
 from app.config import (
     TIPOS_VIGENCIA_OBLIGATORIAS,
     TIPOS_VIGENCIA_DICT,
+    ARMA_ESTADO_OPERATIVA,
+    HAB_NO_HABILITADO,
+    MUNICION_MOV_SIGNO,
 )
 
 logger = logging.getLogger(__name__)
@@ -123,6 +126,100 @@ SCHEMA_RRHH = [
     # Una sola vigencia "viva" por (dni, tipo): al renovar se actualiza la
     # misma fila o se reemplaza. Evita 3 carnes SUCAMEC duplicados.
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_rrhh_vigencia_dni_tipo ON rrhh_vigencia(dni, tipo)",
+
+    # ═══════════════ FASE 4.3: ARMERÍA SUCAMEC ═══════════════
+    # Armas y munición son nivel EMPRESA (registradas a nombre de PAZGUARD
+    # ante SUCAMEC). Trazabilidad forense: cada movimiento queda registrado.
+
+    # Polvorín (almacén de armas/munición autorizado). vigencia_autorizacion
+    # alimenta el dashboard de vencimientos.
+    """
+    CREATE TABLE IF NOT EXISTS rrhh_polvorin (
+        id                      SERIAL PRIMARY KEY,
+        nombre                  TEXT NOT NULL,
+        direccion               TEXT,
+        capacidad_max           INTEGER,
+        autorizacion_sucamec    TEXT,
+        vigencia_autorizacion   DATE,
+        activo                  BOOLEAN NOT NULL DEFAULT TRUE,
+        creado_en               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        creado_por              INTEGER REFERENCES usuarios_global(id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rrhh_polvorin_vence ON rrhh_polvorin(vigencia_autorizacion) WHERE activo",
+
+    # Inventario de armas. TPA (Tarjeta de Propiedad de Arma) único.
+    """
+    CREATE TABLE IF NOT EXISTS rrhh_arma (
+        id                  SERIAL PRIMARY KEY,
+        tpa                 TEXT UNIQUE,
+        marca               TEXT,
+        modelo              TEXT,
+        calibre             TEXT,
+        serie               TEXT,
+        anio                INTEGER,
+        estado              TEXT NOT NULL DEFAULT 'operativa',
+        fecha_adquisicion   DATE,
+        polvorin_id         INTEGER REFERENCES rrhh_polvorin(id) ON DELETE SET NULL,
+        observaciones       TEXT,
+        creado_en           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        creado_por          INTEGER REFERENCES usuarios_global(id),
+        actualizado_en      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rrhh_arma_estado ON rrhh_arma(estado)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_rrhh_arma_serie ON rrhh_arma(serie) WHERE serie IS NOT NULL",
+
+    # Asignación nominal arma → vigilante (el "libro de armas" = historial).
+    # fecha_retorno NULL = arma actualmente en poder del vigilante.
+    """
+    CREATE TABLE IF NOT EXISTS rrhh_asignacion_arma (
+        id                  SERIAL PRIMARY KEY,
+        arma_id             INTEGER NOT NULL REFERENCES rrhh_arma(id) ON DELETE CASCADE,
+        dni                 TEXT NOT NULL REFERENCES empleados_pazguard(dni) ON DELETE CASCADE,
+        puesto              TEXT,
+        fecha_salida        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        fecha_retorno       TIMESTAMPTZ,
+        municion_entregada  INTEGER,
+        municion_devuelta   INTEGER,
+        observaciones       TEXT,
+        registrado_por      INTEGER REFERENCES usuarios_global(id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rrhh_asig_arma_abierta ON rrhh_asignacion_arma(arma_id) WHERE fecha_retorno IS NULL",
+    "CREATE INDEX IF NOT EXISTS idx_rrhh_asig_arma_dni ON rrhh_asignacion_arma(dni)",
+    # Un arma no puede tener 2 asignaciones abiertas a la vez (integridad).
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_rrhh_asig_arma_abierta ON rrhh_asignacion_arma(arma_id) WHERE fecha_retorno IS NULL",
+
+    # Munición: lotes con saldo + movimientos que lo ajustan.
+    """
+    CREATE TABLE IF NOT EXISTS rrhh_municion_lote (
+        id                  SERIAL PRIMARY KEY,
+        calibre             TEXT NOT NULL,
+        cantidad_inicial    INTEGER NOT NULL DEFAULT 0,
+        cantidad_actual     INTEGER NOT NULL DEFAULT 0,
+        fecha_ingreso       DATE,
+        proveedor           TEXT,
+        polvorin_id         INTEGER REFERENCES rrhh_polvorin(id) ON DELETE SET NULL,
+        observaciones       TEXT,
+        creado_en           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        creado_por          INTEGER REFERENCES usuarios_global(id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rrhh_municion_calibre ON rrhh_municion_lote(calibre)",
+    """
+    CREATE TABLE IF NOT EXISTS rrhh_municion_movimiento (
+        id                  SERIAL PRIMARY KEY,
+        lote_id             INTEGER NOT NULL REFERENCES rrhh_municion_lote(id) ON DELETE CASCADE,
+        tipo                TEXT NOT NULL,
+        cantidad            INTEGER NOT NULL,
+        fecha               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        dni                 TEXT REFERENCES empleados_pazguard(dni) ON DELETE SET NULL,
+        motivo              TEXT,
+        registrado_por      INTEGER REFERENCES usuarios_global(id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rrhh_municion_mov_lote ON rrhh_municion_movimiento(lote_id, fecha DESC)",
 ]
 
 
@@ -401,6 +498,26 @@ def vencimientos_proximos(dias_horizonte: int = 90):
                 'dias_restantes': (r['fecha_vencimiento'] - hoy).days,
             })
 
+        # Polvorines (Fase 4.3) — vigencia de autorización SUCAMEC (empresa)
+        rows = conn.execute(
+            """SELECT id, nombre, autorizacion_sucamec, vigencia_autorizacion
+               FROM rrhh_polvorin
+               WHERE activo = TRUE
+                 AND vigencia_autorizacion IS NOT NULL
+                 AND vigencia_autorizacion <= %s
+               ORDER BY vigencia_autorizacion""",
+            (horizonte,)
+        ).fetchall()
+        for r in rows:
+            items.append({
+                'tipo': 'polvorin',
+                'id': r['id'],
+                'descripcion': f"Autorización polvorín {r['nombre']} "
+                               f"({r['autorizacion_sucamec'] or 's/n'})",
+                'fecha_vencimiento': r['vigencia_autorizacion'],
+                'dias_restantes': (r['vigencia_autorizacion'] - hoy).days,
+            })
+
     return sorted(items, key=lambda x: x['dias_restantes'])
 
 
@@ -656,4 +773,309 @@ def stats_personal() -> dict:
         'habilitados': habilitados,
         'atencion': atencion,
         'no_habilitados': no_habilitados,
+    }
+
+
+# ═════════════════════════════════════════════════════════════
+# FASE 4.3 — ARMERÍA SUCAMEC
+# ═════════════════════════════════════════════════════════════
+
+class ReglaArmeria(Exception):
+    """Violación de una regla de negocio de armería (mensaje para el usuario)."""
+
+
+# ── Polvorín ──────────────────────────────────────────────────
+
+def listar_polvorines(solo_activos: bool = True):
+    sql = "SELECT * FROM rrhh_polvorin"
+    if solo_activos:
+        sql += " WHERE activo = TRUE"
+    sql += " ORDER BY nombre"
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(sql).fetchall()]
+
+
+def get_polvorin(polvorin_id: int):
+    with get_conn() as conn:
+        r = conn.execute("SELECT * FROM rrhh_polvorin WHERE id = %s", (polvorin_id,)).fetchone()
+        return dict(r) if r else None
+
+
+def crear_polvorin(*, nombre: str, direccion=None, capacidad_max=None,
+                    autorizacion_sucamec=None, vigencia_autorizacion=None,
+                    creado_por=None) -> int:
+    with get_conn() as conn:
+        r = conn.execute(
+            """INSERT INTO rrhh_polvorin
+                (nombre, direccion, capacidad_max, autorizacion_sucamec,
+                 vigencia_autorizacion, creado_por)
+               VALUES (%s,%s,%s,%s,%s,%s) RETURNING id""",
+            (nombre, direccion, capacidad_max, autorizacion_sucamec,
+             vigencia_autorizacion, creado_por)
+        ).fetchone()
+        return r['id']
+
+
+# ── Armas ─────────────────────────────────────────────────────
+
+def listar_armas(estado: Optional[str] = None):
+    """Lista armas con su asignación abierta (vigilante actual) si la hay."""
+    sql = """
+        SELECT a.*,
+               aa.dni AS asignada_dni,
+               e.nombre_completo AS asignada_a,
+               aa.fecha_salida AS asignada_desde
+        FROM rrhh_arma a
+        LEFT JOIN rrhh_asignacion_arma aa
+               ON aa.arma_id = a.id AND aa.fecha_retorno IS NULL
+        LEFT JOIN empleados_pazguard e ON e.dni = aa.dni
+        WHERE 1=1
+    """
+    params = []
+    if estado:
+        sql += " AND a.estado = %s"
+        params.append(estado)
+    sql += " ORDER BY a.marca NULLS LAST, a.modelo NULLS LAST, a.id"
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(sql, tuple(params)).fetchall()]
+
+
+def get_arma(arma_id: int):
+    with get_conn() as conn:
+        r = conn.execute("SELECT * FROM rrhh_arma WHERE id = %s", (arma_id,)).fetchone()
+        return dict(r) if r else None
+
+
+def crear_arma(*, marca=None, modelo=None, calibre=None, serie=None, anio=None,
+                tpa=None, estado='operativa', fecha_adquisicion=None,
+                polvorin_id=None, observaciones=None, creado_por=None) -> int:
+    with get_conn() as conn:
+        r = conn.execute(
+            """INSERT INTO rrhh_arma
+                (tpa, marca, modelo, calibre, serie, anio, estado,
+                 fecha_adquisicion, polvorin_id, observaciones, creado_por)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+            (tpa, marca, modelo, calibre, serie, anio, estado,
+             fecha_adquisicion, polvorin_id, observaciones, creado_por)
+        ).fetchone()
+        return r['id']
+
+
+def actualizar_arma(arma_id: int, **campos) -> bool:
+    permitidos = {'tpa', 'marca', 'modelo', 'calibre', 'serie', 'anio', 'estado',
+                  'fecha_adquisicion', 'polvorin_id', 'observaciones'}
+    sets, params = [], []
+    for k, v in campos.items():
+        if k in permitidos:
+            sets.append(f"{k} = %s")
+            params.append(v)
+    if not sets:
+        return False
+    sets.append("actualizado_en = NOW()")
+    params.append(arma_id)
+    with get_conn() as conn:
+        r = conn.execute(
+            f"UPDATE rrhh_arma SET {', '.join(sets)} WHERE id = %s", tuple(params))
+        return r.rowcount > 0
+
+
+def asignacion_abierta_de_arma(arma_id: int):
+    with get_conn() as conn:
+        r = conn.execute(
+            """SELECT aa.*, e.nombre_completo
+               FROM rrhh_asignacion_arma aa
+               LEFT JOIN empleados_pazguard e ON e.dni = aa.dni
+               WHERE aa.arma_id = %s AND aa.fecha_retorno IS NULL""",
+            (arma_id,)
+        ).fetchone()
+        return dict(r) if r else None
+
+
+def historial_asignaciones(arma_id: Optional[int] = None, dni: Optional[str] = None,
+                            limite: int = 200):
+    """Libro de armas: historial de salidas/retornos."""
+    sql = """
+        SELECT aa.*, e.nombre_completo,
+               a.marca, a.modelo, a.calibre, a.serie, a.tpa
+        FROM rrhh_asignacion_arma aa
+        LEFT JOIN empleados_pazguard e ON e.dni = aa.dni
+        LEFT JOIN rrhh_arma a ON a.id = aa.arma_id
+        WHERE 1=1
+    """
+    params = []
+    if arma_id:
+        sql += " AND aa.arma_id = %s"
+        params.append(arma_id)
+    if dni:
+        sql += " AND aa.dni = %s"
+        params.append(dni)
+    sql += " ORDER BY aa.fecha_salida DESC LIMIT %s"
+    params.append(limite)
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(sql, tuple(params)).fetchall()]
+
+
+def asignar_arma(*, arma_id: int, dni: str, puesto=None, municion_entregada=None,
+                  observaciones=None, registrado_por=None) -> int:
+    """Entrega un arma a un vigilante. Reglas (compliance estricto):
+      - El arma debe estar OPERATIVA.
+      - El arma no puede tener otra asignación abierta.
+      - El vigilante DEBE estar HABILITADO (vigencias SUCAMEC al día).
+    Lanza ReglaArmeria con mensaje claro si no se cumple.
+    """
+    arma = get_arma(arma_id)
+    if not arma:
+        raise ReglaArmeria("El arma no existe.")
+    if arma['estado'] != ARMA_ESTADO_OPERATIVA:
+        raise ReglaArmeria(f"El arma no está operativa (estado: {arma['estado']}). No se puede asignar.")
+    if asignacion_abierta_de_arma(arma_id):
+        raise ReglaArmeria("El arma ya está asignada y no ha sido devuelta.")
+    if not get_trabajador(dni):
+        raise ReglaArmeria("El vigilante no existe.")
+    hab = estado_habilitacion(dni)
+    if hab['estado'] == HAB_NO_HABILITADO:
+        detalle = []
+        if hab['faltantes']:
+            detalle.append("falta " + ", ".join(hab['faltantes']))
+        if hab['vencidas']:
+            detalle.append("vencido " + ", ".join(v['nombre'] for v in hab['vencidas']))
+        raise ReglaArmeria(
+            "El vigilante NO está habilitado para portar arma ("
+            + "; ".join(detalle) + "). Regulariza sus vigencias antes de asignar."
+        )
+    with get_conn() as conn:
+        r = conn.execute(
+            """INSERT INTO rrhh_asignacion_arma
+                (arma_id, dni, puesto, municion_entregada, observaciones, registrado_por)
+               VALUES (%s,%s,%s,%s,%s,%s) RETURNING id""",
+            (arma_id, dni, puesto, municion_entregada, observaciones, registrado_por)
+        ).fetchone()
+        return r['id']
+
+
+def devolver_arma(asignacion_id: int, municion_devuelta=None, observaciones=None) -> bool:
+    with get_conn() as conn:
+        sets = ["fecha_retorno = NOW()"]
+        params = []
+        if municion_devuelta is not None:
+            sets.append("municion_devuelta = %s")
+            params.append(municion_devuelta)
+        if observaciones:
+            sets.append("observaciones = COALESCE(observaciones,'') || %s")
+            params.append(f" | retorno: {observaciones}")
+        params.append(asignacion_id)
+        r = conn.execute(
+            f"UPDATE rrhh_asignacion_arma SET {', '.join(sets)} "
+            f"WHERE id = %s AND fecha_retorno IS NULL",
+            tuple(params)
+        )
+        return r.rowcount > 0
+
+
+# ── Munición ──────────────────────────────────────────────────
+
+def listar_lotes_municion():
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM rrhh_municion_lote ORDER BY calibre, fecha_ingreso DESC NULLS LAST"
+        ).fetchall()]
+
+
+def get_lote_municion(lote_id: int):
+    with get_conn() as conn:
+        r = conn.execute("SELECT * FROM rrhh_municion_lote WHERE id = %s", (lote_id,)).fetchone()
+        return dict(r) if r else None
+
+
+def crear_lote_municion(*, calibre: str, cantidad_inicial: int, fecha_ingreso=None,
+                         proveedor=None, polvorin_id=None, observaciones=None,
+                         creado_por=None) -> int:
+    """Crea lote + movimiento 'ingreso' inicial."""
+    with get_conn() as conn:
+        r = conn.execute(
+            """INSERT INTO rrhh_municion_lote
+                (calibre, cantidad_inicial, cantidad_actual, fecha_ingreso,
+                 proveedor, polvorin_id, observaciones, creado_por)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+            (calibre, cantidad_inicial, cantidad_inicial, fecha_ingreso,
+             proveedor, polvorin_id, observaciones, creado_por)
+        ).fetchone()
+        lote_id = r['id']
+        conn.execute(
+            """INSERT INTO rrhh_municion_movimiento (lote_id, tipo, cantidad, motivo, registrado_por)
+               VALUES (%s, 'ingreso', %s, 'Ingreso inicial del lote', %s)""",
+            (lote_id, cantidad_inicial, creado_por)
+        )
+        return lote_id
+
+
+def registrar_movimiento_municion(*, lote_id: int, tipo: str, cantidad: int,
+                                    dni=None, motivo=None, registrado_por=None) -> int:
+    """Registra movimiento y ajusta cantidad_actual segun el signo del tipo.
+    No permite dejar saldo negativo.
+    """
+    if cantidad <= 0:
+        raise ReglaArmeria("La cantidad debe ser mayor a cero.")
+    signo = MUNICION_MOV_SIGNO.get(tipo)
+    if signo is None:
+        raise ReglaArmeria("Tipo de movimiento inválido.")
+    delta = signo * cantidad
+    with get_conn() as conn:
+        lote = conn.execute(
+            "SELECT cantidad_actual FROM rrhh_municion_lote WHERE id = %s", (lote_id,)
+        ).fetchone()
+        if not lote:
+            raise ReglaArmeria("El lote no existe.")
+        nuevo = lote['cantidad_actual'] + delta
+        if nuevo < 0:
+            raise ReglaArmeria(
+                f"Saldo insuficiente: hay {lote['cantidad_actual']} y se intentó descontar {cantidad}.")
+        conn.execute(
+            "UPDATE rrhh_municion_lote SET cantidad_actual = %s WHERE id = %s",
+            (nuevo, lote_id))
+        r = conn.execute(
+            """INSERT INTO rrhh_municion_movimiento
+                (lote_id, tipo, cantidad, dni, motivo, registrado_por)
+               VALUES (%s,%s,%s,%s,%s,%s) RETURNING id""",
+            (lote_id, tipo, cantidad, dni, motivo, registrado_por)
+        ).fetchone()
+        return r['id']
+
+
+def movimientos_de_lote(lote_id: int, limite: int = 100):
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            """SELECT m.*, e.nombre_completo
+               FROM rrhh_municion_movimiento m
+               LEFT JOIN empleados_pazguard e ON e.dni = m.dni
+               WHERE m.lote_id = %s ORDER BY m.fecha DESC LIMIT %s""",
+            (lote_id, limite)
+        ).fetchall()]
+
+
+# ── Stats armería ─────────────────────────────────────────────
+
+def stats_armeria() -> dict:
+    with get_conn() as conn:
+        a = conn.execute(
+            """SELECT
+                 COUNT(*) AS total,
+                 COUNT(*) FILTER (WHERE estado = 'operativa') AS operativas,
+                 COUNT(*) FILTER (WHERE estado = 'mantenimiento') AS mantenimiento,
+                 COUNT(*) FILTER (WHERE estado IN ('baja','perdida')) AS fuera
+               FROM rrhh_arma"""
+        ).fetchone()
+        asignadas = conn.execute(
+            "SELECT COUNT(*) AS n FROM rrhh_asignacion_arma WHERE fecha_retorno IS NULL"
+        ).fetchone()['n']
+        muni = conn.execute(
+            "SELECT COALESCE(SUM(cantidad_actual),0) AS saldo FROM rrhh_municion_lote"
+        ).fetchone()['saldo']
+    return {
+        'total': a['total'],
+        'operativas': a['operativas'],
+        'mantenimiento': a['mantenimiento'],
+        'fuera': a['fuera'],
+        'asignadas': asignadas,
+        'municion_saldo': int(muni),
     }
