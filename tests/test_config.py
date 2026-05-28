@@ -38,3 +38,27 @@ def test_escalones_alerta_ordenados_desc():
     assert 0 in config.ALERTA_DIAS
     assert 60 in config.ALERTA_DIAS
     assert 7 in config.ALERTA_DIAS
+
+
+# ── Fase 4.2: vigencias de personal ──
+
+def test_tipos_vigencia_obligatorias():
+    # las 6 del plan + SCTR son obligatorias; DNI y brevete no
+    assert 'carne_sucamec' in config.TIPOS_VIGENCIA_OBLIGATORIAS
+    assert 'curso_basico' in config.TIPOS_VIGENCIA_OBLIGATORIAS
+    assert 'sctr' in config.TIPOS_VIGENCIA_OBLIGATORIAS
+    assert 'dni' not in config.TIPOS_VIGENCIA_OBLIGATORIAS
+    assert 'brevete' not in config.TIPOS_VIGENCIA_OBLIGATORIAS
+    assert config.TIPOS_VIGENCIA_DICT['carne_sucamec'] == 'Carné SUCAMEC'
+
+
+def test_clasificar_habilitacion():
+    H, A, N = config.HAB_HABILITADO, config.HAB_ATENCION, config.HAB_NO_HABILITADO
+    # todo OK
+    assert config.clasificar_habilitacion([], [], []) == H
+    # algo por vencer pero nada faltante/vencido
+    assert config.clasificar_habilitacion([], [], [{'nombre': 'x'}]) == A
+    # falta una obligatoria -> no habilitado (gana sobre por_vencer)
+    assert config.clasificar_habilitacion(['Carné SUCAMEC'], [], [{'nombre': 'x'}]) == N
+    # hay vencida -> no habilitado
+    assert config.clasificar_habilitacion([], [{'nombre': 'y'}], []) == N

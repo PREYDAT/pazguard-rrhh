@@ -26,11 +26,14 @@ async def portal(request: Request):
     # no por proyecto/contrato. Por eso stats y vencimientos NO se filtran por
     # proyecto. Las vigencias de PERSONAL (Fase 4.2) si seran por proyecto.
     stats = db_rrhh.stats_compliance()
+    stats_personal = db_rrhh.stats_personal()
     vencimientos = db_rrhh.vencimientos_proximos(dias_horizonte=90)
 
-    # Calcular semaforo global
-    vencidos = stats['modalidades']['vencidas'] + stats['fianzas']['vencidas']
-    por_vencer = stats['modalidades']['por_vencer'] + stats['fianzas']['por_vencer']
+    # Calcular semaforo global (incluye personal no habilitado)
+    vencidos = (stats['modalidades']['vencidas'] + stats['fianzas']['vencidas']
+                + stats_personal['no_habilitados'])
+    por_vencer = (stats['modalidades']['por_vencer'] + stats['fianzas']['por_vencer']
+                  + stats_personal['atencion'])
 
     if vencidos > 0:
         semaforo = 'rojo'
@@ -60,6 +63,7 @@ async def portal(request: Request):
             'session': session,
             'proyecto_activo': proyecto,
             'stats': stats,
+            'stats_personal': stats_personal,
             'vencimientos': vencimientos[:10],  # top 10
             'vencimientos_total': len(vencimientos),
             'semaforo': semaforo,

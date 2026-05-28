@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% block title %}{{ trabajador.nombre_completo }} · PAZGUARD RRHH{% endblock %}
+{% block content %}
+
+<a href="/personal" style="font-size:.85rem">← Volver al personal</a>
+
+<div class="flex-between" style="margin:14px 0 4px;flex-wrap:wrap;gap:12px">
+    <div>
+        <h1 style="margin:0">{{ trabajador.nombre_completo }}</h1>
+        <p class="subtitle" style="margin:4px 0 0">
+            DNI {{ trabajador.dni }}
+            {% if trabajador.cargo_base %} · {{ trabajador.cargo_base }}{% endif %}
+            {% if trabajador.fecha_ingreso %} · ingreso {{ trabajador.fecha_ingreso.strftime('%d/%m/%Y') }}{% endif %}
+        </p>
+    </div>
+    <div style="display:flex;gap:8px">
+        <a href="/personal/{{ trabajador.dni }}/editar" class="btn btn-sm"><i class="fa-solid fa-pen"></i> Editar datos</a>
+    </div>
+</div>
+
+{% if error %}<div class="alert alert-error"><i class="fa-solid fa-triangle-exclamation"></i> {{ error }}</div>{% endif %}
+{% if ok %}<div class="alert alert-ok"><i class="fa-solid fa-circle-check"></i> {{ ok }}</div>{% endif %}
+
+{# ── Banner de habilitación ── #}
+{% if hab.estado == HAB_HABILITADO %}
+<div class="card" style="border-left:4px solid var(--success)">
+    <div style="display:flex;align-items:center;gap:14px">
+        <i class="fa-solid fa-circle-check" style="font-size:30px;color:var(--success)"></i>
+        <div>
+            <div style="font-weight:800;color:var(--success);font-size:1.1rem">Habilitado para operar</div>
+            <div style="font-size:.85rem;color:var(--text-muted)">Todas las vigencias obligatorias ({{ hab.total_obligatorias }}) presentes y vigentes.</div>
+        </div>
+    </div>
+</div>
+{% elif hab.estado == HAB_ATENCION %}
+<div class="card" style="border-left:4px solid var(--warning)">
+    <div style="display:flex;align-items:center;gap:14px">
+        <i class="fa-solid fa-clock" style="font-size:30px;color:var(--warning)"></i>
+        <div>
+            <div style="font-weight:800;color:var(--warning);font-size:1.1rem">Habilitado — requiere atención</div>
+            <div style="font-size:.85rem;color:var(--text-soft)">
+                {% for p in hab.por_vencer %}{{ p.nombre }} vence en {{ p.dias }}d{% if not loop.last %} · {% endif %}{% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="card" style="border-left:4px solid var(--danger)">
+    <div style="display:flex;align-items:center;gap:14px">
+        <i class="fa-solid fa-ban" style="font-size:30px;color:var(--danger)"></i>
+        <div>
+            <div style="font-weight:800;color:var(--danger);font-size:1.1rem">NO habilitado para operar</div>
+            <div style="font-size:.85rem;color:var(--text-soft)">
+                {% if hab.faltantes %}Falta: {{ hab.faltantes|join(', ') }}.{% endif %}
+                {% if hab.vencidas %} Vencido: {% for v in hab.vencidas %}{{ v.nombre }}{% if not loop.last %}, {% endif %}{% endfor %}.{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ── Matriz de vigencias ── #}
+<h2><i class="fa-solid fa-clipboard-check"></i> Vigencias</h2>
+<div class="card" style="padding:0;overflow:hidden">
+    <table>
+        <thead>
+            <tr><th>Documento</th><th>N°</th><th>Vence</th><th>Estado</th><th></th></tr>
+        </thead>
+        <tbody>
+            {% for cod, nombre, oblig, meses in tipos_vigencia %}
+            {% set v = vigencias.get(cod) %}
+            <tr>
+                <td>
+                    <strong>{{ nombre }}</strong>
+                    {% if oblig %}<span class="badge" style="background:#FEE2E2;color:#991B1B;margin-left:6px">obligatoria</span>{% endif %}
+                </td>
+                <td class="mono">{{ v.numero_doc if v and v.numero_doc else '—' }}</td>
+                <td class="mono">
+                    {% if v and v.fecha_vencimiento %}{{ v.fecha_vencimiento.strftime('%d/%m/%Y') }}
+                    {% elif v %}permanente{% else %}—{% endif %}
+                </td>
+                <td>
+                    {% if not v %}
+                        {% if oblig %}<span class="badge badge-danger">Falta</span>{% else %}<span class="badge">no registrado</span>{% endif %}
+                    {% elif not v.fecha_vencimiento %}
+                        <span class="badge badge-success">vigente</span>
+                    {% else %}
+                        {% set d = (v.fecha_vencimiento - hoy).days %}
+                        {% if d < 0 %}<span class="badge badge-danger">vencido hace {{ -d }}d</span>
+                        {% elif d <= 60 %}<span class="badge badge-warn">vence en {{ d }}d</span>
+                        {% else %}<span class="badge badge-success">{{ d }}d</span>{% endif %}
+                    {% endif %}
+                </td>
+                <td>
+                    {% if v %}
+                    <form method="post" action="/personal/{{ trabajador.dni }}/vigencias/{{ v.id }}/eliminar"
+                          style="display:inline" onsubmit="return confirm('¿Eliminar la vigencia {{ nombre }}?')">
+                        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+                        <button type="submit" class="btn btn-sm btn-danger" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{# ── Form agregar/renovar vigencia ── #}
+<h2 style="margin-top:30px"><i class="fa-solid fa-plus"></i> Registrar / renovar vigencia</h2>
+<form method="post" action="/personal/{{ trabajador.dni }}/vigencias" class="card">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+    <div class="form-row">
+        <div class="form-group">
+            <label>Tipo de documento *</label>
+            <select name="tipo" required>
+                {% for cod, nombre, oblig, meses in tipos_vigencia %}
+                <option value="{{ cod }}">{{ nombre }}{% if oblig %} (obligatoria){% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>N° de documento</label>
+            <input type="text" name="numero_doc" placeholder="N° carné / constancia">
+        </div>
+        <div class="form-group">
+            <label>Entidad emisora</label>
+            <input type="text" name="entidad_emisora" placeholder="SUCAMEC / CEFOESP / clínica...">
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="form-group">
+            <label>Fecha de emisión</label>
+            <input type="date" name="fecha_emision">
+        </div>
+        <div class="form-group">
+            <label>Fecha de vencimiento</label>
+            <input type="date" name="fecha_vencimiento">
+        </div>
+    </div>
+    <div class="form-group">
+        <label>URL del PDF (opcional)</label>
+        <input type="url" name="archivo_pdf_url" placeholder="https://...">
+    </div>
+    <div class="form-group">
+        <label>Observaciones</label>
+        <textarea name="observaciones" rows="2"></textarea>
+    </div>
+    <p class="text-muted" style="font-size:.8rem;margin:0 0 14px">
+        <i class="fa-solid fa-circle-info"></i> Si el documento ya existe, se reemplaza (renovación). Deja vencimiento vacío si es permanente (ej. DNI).
+    </p>
+    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar vigencia</button>
+</form>
+
+<div style="margin-top:30px;border-top:1px solid var(--border);padding-top:16px">
+    <form method="post" action="/personal/{{ trabajador.dni }}/baja"
+          onsubmit="return confirm('¿Dar de baja a {{ trabajador.nombre_completo }}? Dejará de aparecer en el personal activo.')">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+        <button type="submit" class="btn btn-danger btn-sm"><i class="fa-solid fa-user-slash"></i> Dar de baja</button>
+    </form>
+</div>
+
+{% endblock %}

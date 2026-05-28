@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}Personal vigilante · PAZGUARD RRHH{% endblock %}
+{% block content %}
+
+<div class="flex-between" style="margin-bottom:18px">
+    <div>
+        <h1>Personal vigilante</h1>
+        <p class="subtitle">Habilitación SUCAMEC — carné, cursos, exámenes, SCTR</p>
+    </div>
+    <a href="/personal/nuevo" class="btn btn-primary">
+        <i class="fa-solid fa-user-plus"></i> Nuevo vigilante
+    </a>
+</div>
+
+{% if error %}<div class="alert alert-error"><i class="fa-solid fa-triangle-exclamation"></i> {{ error }}</div>{% endif %}
+{% if ok %}<div class="alert alert-ok"><i class="fa-solid fa-circle-check"></i> {{ ok }}</div>{% endif %}
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px">
+    <div class="card" style="margin:0">
+        <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">Total activos</div>
+        <div style="font-size:1.8rem;font-weight:800;color:var(--accent)">{{ stats.total }}</div>
+    </div>
+    <div class="card" style="margin:0">
+        <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">Habilitados</div>
+        <div style="font-size:1.8rem;font-weight:800;color:var(--success)">{{ stats.habilitados }}</div>
+    </div>
+    <div class="card" style="margin:0">
+        <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">Atención</div>
+        <div style="font-size:1.8rem;font-weight:800;color:var(--warning)">{{ stats.atencion }}</div>
+    </div>
+    <div class="card" style="margin:0">
+        <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">NO habilitados</div>
+        <div style="font-size:1.8rem;font-weight:800;color:var(--danger)">{{ stats.no_habilitados }}</div>
+    </div>
+</div>
+
+{% if personal %}
+<div class="card" style="padding:0;overflow:hidden">
+    <table>
+        <thead>
+            <tr>
+                <th>DNI</th>
+                <th>Apellidos y nombres</th>
+                <th>Cargo</th>
+                <th>Vigencias</th>
+                <th>Habilitación</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in personal %}
+            <tr>
+                <td class="mono">{{ t.dni }}</td>
+                <td><strong>{{ t.nombre_completo }}</strong></td>
+                <td>{{ t.cargo_base or '—' }}</td>
+                <td class="mono">{{ t._hab.registradas }}/{{ t._hab.total_obligatorias }}</td>
+                <td>
+                    {% if t._hab.estado == HAB_HABILITADO %}
+                        <span class="badge badge-success"><i class="fa-solid fa-circle-check"></i> Habilitado</span>
+                    {% elif t._hab.estado == HAB_ATENCION %}
+                        <span class="badge badge-warn"><i class="fa-solid fa-clock"></i> Atención</span>
+                    {% else %}
+                        <span class="badge badge-danger"><i class="fa-solid fa-ban"></i> NO habilitado</span>
+                    {% endif %}
+                </td>
+                <td><a href="/personal/{{ t.dni }}" class="btn btn-sm">Ver ficha</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:36px 22px">
+    <i class="fa-solid fa-users" style="font-size:48px;color:var(--text-muted);margin-bottom:14px"></i>
+    <h3 style="margin:0 0 6px">Sin personal registrado</h3>
+    <p style="margin:0 0 18px;color:var(--text-muted)">Registra el primer vigilante y sus vigencias SUCAMEC.</p>
+    <a href="/personal/nuevo" class="btn btn-primary"><i class="fa-solid fa-user-plus"></i> Registrar vigilante</a>
+</div>
+{% endif %}
+
+{% endblock %}

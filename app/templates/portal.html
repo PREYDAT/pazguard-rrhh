@@ -73,6 +73,27 @@
         {% endif %}
     </a>
 
+    <a href="/personal" class="card" style="text-decoration:none;color:inherit">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+            <div>
+                <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">Personal vigilante</div>
+                <div style="font-size:2rem;font-weight:800;color:var(--accent);margin-top:6px">{{ stats_personal.habilitados }}<span style="font-size:1rem;color:var(--text-muted)">/{{ stats_personal.total }}</span></div>
+                <div style="font-size:.85rem;color:var(--text-soft)">habilitados</div>
+            </div>
+            <i class="fa-solid fa-users-gear" style="font-size:1.8rem;color:var(--accent-cool)"></i>
+        </div>
+        {% if stats_personal.atencion > 0 or stats_personal.no_habilitados > 0 %}
+        <div style="display:flex;gap:10px;margin-top:14px;font-size:.78rem">
+            {% if stats_personal.atencion > 0 %}
+            <span class="badge badge-warn">{{ stats_personal.atencion }} atención</span>
+            {% endif %}
+            {% if stats_personal.no_habilitados > 0 %}
+            <span class="badge badge-danger">{{ stats_personal.no_habilitados }} NO habilitado</span>
+            {% endif %}
+        </div>
+        {% endif %}
+    </a>
+
     <div class="card">
         <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">UIT {{ anio_uit }}</div>
         <div style="font-size:1.7rem;font-weight:800;color:var(--accent);margin-top:6px">S/ {{ '{:,.0f}'.format(uit_vigente) }}</div>
@@ -100,8 +121,10 @@
                 <td>
                     {% if v.tipo == 'modalidad' %}
                     <i class="fa-solid fa-shield-halved" style="color:var(--accent)"></i> Modalidad
-                    {% else %}
+                    {% elif v.tipo == 'fianza' %}
                     <i class="fa-solid fa-file-shield" style="color:var(--accent-warm)"></i> Fianza
+                    {% else %}
+                    <i class="fa-solid fa-id-card" style="color:var(--accent-cool)"></i> Personal
                     {% endif %}
                 </td>
                 <td>{{ v.descripcion }}</td>
@@ -122,8 +145,10 @@
                 <td>
                     {% if v.tipo == 'modalidad' %}
                     <a href="/modalidades/{{ v.id }}" class="btn btn-sm">Ver</a>
-                    {% else %}
+                    {% elif v.tipo == 'fianza' %}
                     <a href="/cartas-fianza/{{ v.id }}" class="btn btn-sm">Ver</a>
+                    {% else %}
+                    <a href="/personal/{{ v.dni }}" class="btn btn-sm">Ver</a>
                     {% endif %}
                 </td>
             </tr>
@@ -151,6 +176,12 @@
     </a>
     <a href="/cartas-fianza/nueva" class="btn btn-primary">
         <i class="fa-solid fa-plus"></i> Nueva carta fianza
+    </a>
+    <a href="/personal/nuevo" class="btn btn-primary">
+        <i class="fa-solid fa-user-plus"></i> Nuevo vigilante
+    </a>
+    <a href="/personal" class="btn">
+        <i class="fa-solid fa-users"></i> Ver personal
     </a>
     <a href="/modalidades" class="btn">
         <i class="fa-solid fa-list"></i> Ver modalidades

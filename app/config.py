@@ -51,6 +51,48 @@ ESTADO_VENCIDO = 'vencido'
 ESTADO_RENOVADA = 'renovada'  # archivada, ya hay otra vigente
 
 
+# ── Tipos de vigencia de PERSONAL vigilante (SUCAMEC + laboral) ───
+# (codigo, nombre, obligatoria_para_habilitacion, vigencia_meses_tipica)
+# Marco normativo: DL 1213, DS 005-2023-IN (carné, cursos), DL 728 + SCTR
+# Riesgo III (vigilancia es actividad de alto riesgo).
+TIPOS_VIGENCIA = [
+    ('carne_sucamec',     'Carné SUCAMEC',                         True,  36),
+    ('curso_basico',      'Curso Básico de Seguridad',             True,  36),
+    ('perfeccionamiento', 'Curso de Perfeccionamiento',            True,  24),
+    ('examen_medico',     'Examen Médico Ocupacional',             True,  12),
+    ('examen_psicologico','Examen Psicológico',                    True,  12),
+    ('antecedentes',      'Antecedentes (penales/policiales/jud.)', True,   6),
+    ('sctr',              'SCTR (Salud + Pensión, Riesgo III)',    True,  12),
+    ('dni',               'DNI',                                   False, None),
+    ('brevete',           'Licencia de conducir (brevete)',        False, None),
+]
+
+# Codigos obligatorios para que un vigilante este HABILITADO a operar.
+TIPOS_VIGENCIA_OBLIGATORIAS = [c for c, _, oblig, _ in TIPOS_VIGENCIA if oblig]
+TIPOS_VIGENCIA_DICT = {c: n for c, n, _, _ in TIPOS_VIGENCIA}
+TIPOS_VIGENCIA_MESES = {c: m for c, _, _, m in TIPOS_VIGENCIA}
+
+
+# ── Estado de habilitación del vigilante (para operar) ────────
+HAB_HABILITADO = 'habilitado'      # todas las obligatorias vigentes
+HAB_ATENCION = 'atencion'          # todas presentes pero alguna vence < 60d
+HAB_NO_HABILITADO = 'no_habilitado'  # falta una obligatoria o hay vencida
+
+
+def clasificar_habilitacion(faltantes, vencidas, por_vencer) -> str:
+    """Función pura (testeable sin DB) que decide el estado de habilitación.
+
+    - NO_HABILITADO si falta alguna obligatoria o hay alguna vencida.
+    - ATENCION si todas presentes/vigentes pero alguna vence pronto.
+    - HABILITADO en otro caso.
+    """
+    if faltantes or vencidas:
+        return HAB_NO_HABILITADO
+    if por_vencer:
+        return HAB_ATENCION
+    return HAB_HABILITADO
+
+
 def estado_por_fecha(fecha_vencimiento: date) -> str:
     """Devuelve el estado segun la fecha de vencimiento vs hoy."""
     if not fecha_vencimiento:

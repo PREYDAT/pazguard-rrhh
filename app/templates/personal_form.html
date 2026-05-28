@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Editar' if trabajador else 'Nuevo' }} vigilante · PAZGUARD RRHH{% endblock %}
+{% block content %}
+
+<a href="/personal" style="font-size:.85rem">← Volver al personal</a>
+
+<h1 style="margin-top:14px">{{ 'Editar' if trabajador else 'Nuevo' }} vigilante</h1>
+<p class="subtitle">
+    {% if trabajador %}Editar datos de <strong>{{ trabajador.nombre_completo }}</strong>
+    {% else %}Registrar un nuevo trabajador del personal de seguridad{% endif %}
+</p>
+
+<form method="post"
+      action="{{ '/personal/' + trabajador.dni + '/editar' if trabajador else '/personal/nuevo' }}"
+      class="card">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>DNI *</label>
+            {% if trabajador %}
+            <input type="text" value="{{ trabajador.dni }}" disabled>
+            {% else %}
+            <input type="text" name="dni" required maxlength="12" placeholder="8 dígitos"
+                   value="">
+            {% endif %}
+        </div>
+        <div class="form-group">
+            <label>Cargo</label>
+            <input type="text" name="cargo_base"
+                   value="{{ (trabajador.cargo_base if trabajador else '') or '' }}"
+                   placeholder="Ej: Agente de seguridad / Supervisor">
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Apellido paterno</label>
+            <input type="text" name="apellido_paterno"
+                   value="{{ (trabajador.apellido_paterno if trabajador else '') or '' }}">
+        </div>
+        <div class="form-group">
+            <label>Apellido materno</label>
+            <input type="text" name="apellido_materno"
+                   value="{{ (trabajador.apellido_materno if trabajador else '') or '' }}">
+        </div>
+        <div class="form-group">
+            <label>Nombres</label>
+            <input type="text" name="nombres"
+                   value="{{ (trabajador.nombres if trabajador else '') or '' }}">
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Fecha de nacimiento</label>
+            <input type="date" name="fecha_nacimiento"
+                   value="{{ trabajador.fecha_nacimiento.strftime('%Y-%m-%d') if trabajador and trabajador.fecha_nacimiento else '' }}">
+        </div>
+        <div class="form-group">
+            <label>Sexo</label>
+            <select name="sexo">
+                <option value="">—</option>
+                <option value="M" {% if trabajador and trabajador.sexo == 'M' %}selected{% endif %}>Masculino</option>
+                <option value="F" {% if trabajador and trabajador.sexo == 'F' %}selected{% endif %}>Femenino</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Fecha de ingreso</label>
+            <input type="date" name="fecha_ingreso"
+                   value="{{ trabajador.fecha_ingreso.strftime('%Y-%m-%d') if trabajador and trabajador.fecha_ingreso else '' }}">
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Teléfono</label>
+            <input type="text" name="telefono"
+                   value="{{ (trabajador.telefono if trabajador else '') or '' }}">
+        </div>
+        <div class="form-group">
+            <label>Email</label>
+            <input type="email" name="email"
+                   value="{{ (trabajador.email if trabajador else '') or '' }}">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Dirección</label>
+        <input type="text" name="direccion"
+               value="{{ (trabajador.direccion if trabajador else '') or '' }}">
+    </div>
+
+    <div class="form-group">
+        <label>URL de foto (opcional)</label>
+        <input type="url" name="foto_url"
+               value="{{ (trabajador.foto_url if trabajador else '') or '' }}" placeholder="https://...">
+    </div>
+
+    <div class="form-group">
+        <label>Observaciones</label>
+        <textarea name="observaciones" rows="3">{{ (trabajador.observaciones if trabajador else '') or '' }}</textarea>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:18px">
+        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
+        <a href="/personal" class="btn">Cancelar</a>
+    </div>
+</form>
+
+{% endblock %}

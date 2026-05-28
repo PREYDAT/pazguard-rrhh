@@ -14,6 +14,11 @@ from typing import Optional
 
 from pazguard_core.db import get_conn
 
+from app.config import (
+    TIPOS_VIGENCIA_OBLIGATORIAS,
+    TIPOS_VIGENCIA_DICT,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -89,6 +94,35 @@ SCHEMA_RRHH = [
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_rrhh_modalidad_codigo_empresa "
     "ON rrhh_modalidad (codigo) WHERE proyecto_id IS NULL",
     "UPDATE rrhh_carta_fianza SET proyecto_id = NULL WHERE proyecto_id IS NOT NULL",
+
+    # ── FASE 4.2: Vigencias de PERSONAL vigilante ─────────────
+    # El trabajador es empleados_pazguard (core, dni PK, compartido en toda
+    # la suite). Aqui guardamos sus vigencias SUCAMEC/laborales. Cada vigencia
+    # es de la PERSONA (no por proyecto): un carne SUCAMEC pertenece al
+    # vigilante, no a un contrato. El filtro por proyecto (que vigilantes
+    # estan en el contrato X) vendra de empleado_proyecto_asignacion (core).
+    """
+    CREATE TABLE IF NOT EXISTS rrhh_vigencia (
+        id                  SERIAL PRIMARY KEY,
+        dni                 TEXT NOT NULL REFERENCES empleados_pazguard(dni) ON DELETE CASCADE,
+        tipo                TEXT NOT NULL,
+        numero_doc          TEXT,
+        entidad_emisora     TEXT,
+        fecha_emision       DATE,
+        fecha_vencimiento   DATE,
+        archivo_pdf_url     TEXT,
+        observaciones       TEXT,
+        creada_en           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        creada_por          INTEGER REFERENCES usuarios_global(id),
+        actualizada_en      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rrhh_vigencia_dni ON rrhh_vigencia(dni)",
+    "CREATE INDEX IF NOT EXISTS idx_rrhh_vigencia_vence ON rrhh_vigencia(fecha_vencimiento)",
+    "CREATE INDEX IF NOT EXISTS idx_rrhh_vigencia_tipo ON rrhh_vigencia(dni, tipo)",
+    # Una sola vigencia "viva" por (dni, tipo): al renovar se actualiza la
+    # misma fila o se reemplaza. Evita 3 carnes SUCAMEC duplicados.
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_rrhh_vigencia_dni_tipo ON rrhh_vigencia(dni, tipo)",
 ]
 
 
@@ -344,6 +378,29 @@ def vencimientos_proximos(dias_horizonte: int = 90):
                 'dias_restantes': (r['fecha_vencimiento'] - hoy).days,
             })
 
+        # Vigencias de PERSONAL (Fase 4.2) — nivel persona. Solo trabajadores
+        # activos. El link del dashboard va a la ficha del trabajador.
+        rows = conn.execute(
+            """SELECT v.id, v.tipo, v.fecha_vencimiento, v.dni, e.nombre_completo
+               FROM rrhh_vigencia v
+               JOIN empleados_pazguard e ON e.dni = v.dni
+               WHERE e.fecha_salida IS NULL
+                 AND v.fecha_vencimiento IS NOT NULL
+                 AND v.fecha_vencimiento <= %s
+               ORDER BY v.fecha_vencimiento""",
+            (horizonte,)
+        ).fetchall()
+        for r in rows:
+            nombre_tipo = TIPOS_VIGENCIA_DICT.get(r['tipo'], r['tipo'])
+            items.append({
+                'tipo': 'vigencia',
+                'id': r['id'],
+                'dni': r['dni'],
+                'descripcion': f"{nombre_tipo} — {r['nombre_completo']} (DNI {r['dni']})",
+                'fecha_vencimiento': r['fecha_vencimiento'],
+                'dias_restantes': (r['fecha_vencimiento'] - hoy).days,
+            })
+
     return sorted(items, key=lambda x: x['dias_restantes'])
 
 
@@ -390,4 +447,213 @@ def stats_compliance() -> dict:
             'por_vencer': fianzas_por_vencer,
             'vencidas': fianzas_vencidas,
         },
+    }
+
+
+# ═════════════════════════════════════════════════════════════
+# FASE 4.2 — PERSONAL VIGILANTE (empleados_pazguard del core)
+# ═════════════════════════════════════════════════════════════
+# El trabajador vive en empleados_pazguard (core, dni PK, compartido en toda
+# la suite). El satelite RRHH lo gestiona aqui. Solo tocamos los campos
+# relevantes a SUCAMEC; los de planilla (afp, banco, cts) se llenaran en
+# Fase 4.4.
+
+_CAMPOS_TRABAJADOR = (
+    'nombre_completo', 'apellido_paterno', 'apellido_materno', 'nombres',
+    'tipo_documento', 'fecha_nacimiento', 'sexo', 'telefono', 'email',
+    'direccion', 'fecha_ingreso', 'fecha_salida', 'cargo_base', 'foto_url',
+    'observaciones',
+)
+
+
+def listar_personal(solo_activos: bool = True):
+    """Lista trabajadores. Activo = fecha_salida IS NULL."""
+    sql = "SELECT * FROM empleados_pazguard WHERE 1=1"
+    if solo_activos:
+        sql += " AND fecha_salida IS NULL"
+    sql += " ORDER BY apellido_paterno NULLS LAST, nombre_completo"
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(sql).fetchall()]
+
+
+def get_trabajador(dni: str):
+    with get_conn() as conn:
+        r = conn.execute(
+            "SELECT * FROM empleados_pazguard WHERE dni = %s", (dni,)
+        ).fetchone()
+        return dict(r) if r else None
+
+
+def crear_trabajador(*, dni: str, nombre_completo: str, **campos) -> str:
+    """Crea un trabajador en empleados_pazguard. dni es PK (UniqueViolation
+    si ya existe -> el caller la captura).
+    """
+    cols = ['dni', 'nombre_completo']
+    vals = [dni, nombre_completo]
+    for k, v in campos.items():
+        if k in _CAMPOS_TRABAJADOR and v is not None:
+            cols.append(k)
+            vals.append(v)
+    placeholders = ', '.join(['%s'] * len(vals))
+    collist = ', '.join(cols)
+    with get_conn() as conn:
+        conn.execute(
+            f"INSERT INTO empleados_pazguard ({collist}) VALUES ({placeholders})",
+            tuple(vals)
+        )
+    return dni
+
+
+def actualizar_trabajador(dni: str, **campos) -> bool:
+    sets, params = [], []
+    for k, v in campos.items():
+        if k in _CAMPOS_TRABAJADOR:
+            sets.append(f"{k} = %s")
+            params.append(v)
+    if not sets:
+        return False
+    sets.append("actualizado_en = NOW()")
+    params.append(dni)
+    with get_conn() as conn:
+        r = conn.execute(
+            f"UPDATE empleados_pazguard SET {', '.join(sets)} WHERE dni = %s",
+            tuple(params)
+        )
+        return r.rowcount > 0
+
+
+# ── Vigencias del trabajador ──────────────────────────────────
+
+def listar_vigencias(dni: str):
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM rrhh_vigencia WHERE dni = %s ORDER BY tipo", (dni,)
+        ).fetchall()]
+
+
+def get_vigencia(vigencia_id: int):
+    with get_conn() as conn:
+        r = conn.execute(
+            "SELECT * FROM rrhh_vigencia WHERE id = %s", (vigencia_id,)
+        ).fetchone()
+        return dict(r) if r else None
+
+
+def upsert_vigencia(*, dni: str, tipo: str,
+                     numero_doc: Optional[str] = None,
+                     entidad_emisora: Optional[str] = None,
+                     fecha_emision: Optional[date] = None,
+                     fecha_vencimiento: Optional[date] = None,
+                     archivo_pdf_url: Optional[str] = None,
+                     observaciones: Optional[str] = None,
+                     creada_por: Optional[int] = None) -> int:
+    """Crea o actualiza la vigencia (dni, tipo). Por el indice unico
+    (dni, tipo) usamos ON CONFLICT para renovar la misma fila (no duplicar
+    carnes). Retorna el id de la fila.
+    """
+    with get_conn() as conn:
+        r = conn.execute(
+            """INSERT INTO rrhh_vigencia
+                (dni, tipo, numero_doc, entidad_emisora, fecha_emision,
+                 fecha_vencimiento, archivo_pdf_url, observaciones, creada_por)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+               ON CONFLICT (dni, tipo) DO UPDATE SET
+                 numero_doc = EXCLUDED.numero_doc,
+                 entidad_emisora = EXCLUDED.entidad_emisora,
+                 fecha_emision = EXCLUDED.fecha_emision,
+                 fecha_vencimiento = EXCLUDED.fecha_vencimiento,
+                 archivo_pdf_url = EXCLUDED.archivo_pdf_url,
+                 observaciones = EXCLUDED.observaciones,
+                 actualizada_en = NOW()
+               RETURNING id""",
+            (dni, tipo, numero_doc, entidad_emisora, fecha_emision,
+             fecha_vencimiento, archivo_pdf_url, observaciones, creada_por)
+        ).fetchone()
+        return r['id']
+
+
+def eliminar_vigencia(vigencia_id: int) -> bool:
+    with get_conn() as conn:
+        r = conn.execute("DELETE FROM rrhh_vigencia WHERE id = %s", (vigencia_id,))
+        return r.rowcount > 0
+
+
+# ── Estado de HABILITACIÓN del vigilante ──────────────────────
+
+def estado_habilitacion(dni: str) -> dict:
+    """Calcula si un vigilante esta habilitado para operar.
+
+    HABILITADO: todas las vigencias obligatorias presentes y vigentes.
+    ATENCION:   todas presentes/vigentes pero alguna obligatoria vence < 60d.
+    NO_HABILITADO: falta una obligatoria o hay alguna vencida.
+
+    Una vigencia sin fecha_vencimiento (ej. DNI) se considera permanente.
+    """
+    hoy = date.today()
+    vigencias = {v['tipo']: v for v in listar_vigencias(dni)}
+
+    faltantes, vencidas, por_vencer = [], [], []
+    for tipo in TIPOS_VIGENCIA_OBLIGATORIAS:
+        v = vigencias.get(tipo)
+        nombre = TIPOS_VIGENCIA_DICT.get(tipo, tipo)
+        if not v:
+            faltantes.append(nombre)
+            continue
+        fv = v.get('fecha_vencimiento')
+        if fv is None:
+            continue  # permanente
+        if fv < hoy:
+            vencidas.append({'nombre': nombre, 'fecha': fv})
+        elif (fv - hoy).days <= 60:
+            por_vencer.append({'nombre': nombre, 'fecha': fv, 'dias': (fv - hoy).days})
+
+    from app.config import clasificar_habilitacion
+    estado = clasificar_habilitacion(faltantes, vencidas, por_vencer)
+
+    return {
+        'estado': estado,
+        'faltantes': faltantes,
+        'vencidas': vencidas,
+        'por_vencer': por_vencer,
+        'total_obligatorias': len(TIPOS_VIGENCIA_OBLIGATORIAS),
+        'registradas': len([t for t in TIPOS_VIGENCIA_OBLIGATORIAS if t in vigencias]),
+    }
+
+
+def stats_personal() -> dict:
+    """Conteos de personal por estado de habilitacion (1 query agregada)."""
+    n_oblig = len(TIPOS_VIGENCIA_OBLIGATORIAS)
+    with get_conn() as conn:
+        rows = conn.execute(
+            """SELECT e.dni,
+                 COUNT(v.id) FILTER (
+                   WHERE v.tipo = ANY(%(ob)s)
+                     AND (v.fecha_vencimiento IS NULL OR v.fecha_vencimiento >= CURRENT_DATE)
+                 ) AS oblig_ok,
+                 COUNT(v.id) FILTER (
+                   WHERE v.tipo = ANY(%(ob)s)
+                     AND v.fecha_vencimiento BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '60 days'
+                 ) AS oblig_pv
+               FROM empleados_pazguard e
+               LEFT JOIN rrhh_vigencia v ON v.dni = e.dni
+               WHERE e.fecha_salida IS NULL
+               GROUP BY e.dni""",
+            {'ob': TIPOS_VIGENCIA_OBLIGATORIAS}
+        ).fetchall()
+
+    total = len(rows)
+    habilitados = atencion = no_habilitados = 0
+    for r in rows:
+        if r['oblig_ok'] < n_oblig:
+            no_habilitados += 1
+        elif r['oblig_pv'] > 0:
+            atencion += 1
+        else:
+            habilitados += 1
+
+    return {
+        'total': total,
+        'habilitados': habilitados,
+        'atencion': atencion,
+        'no_habilitados': no_habilitados,
     }
