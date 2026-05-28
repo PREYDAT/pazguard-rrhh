@@ -479,56 +479,17 @@ a:hover { text-decoration: underline; }
 {% if session %}
 <a href="#main-content" class="skip-link">Saltar al contenido</a>
 <div class="topbar" role="banner">
-    <a href="/" class="brand" aria-label="PAZGUARD HUB - inicio">
-        <img class="brand-mark" src="/static/img/logo_oficial.png" alt="PAZGUARD HUB">
+    <a href="/" class="brand" aria-label="PAZGUARD RRHH/SUCAMEC - inicio">
+        <img class="brand-mark" src="/static/img/logo_oficial.png" alt="PAZGUARD RRHH/SUCAMEC">
     </a>
 
+    {# Satelite RRHH: solo REFLEJA el proyecto activo (NO lo cambia — eso se
+       hace en el Hub central, que escribe en la sesion compartida). Por eso
+       aqui es un label, no un switcher con /switch (ese endpoint no existe
+       en el satelite y daria 404). Fix auditoria Opus 4.8. #}
     {% set _pa = proyecto_activo if proyecto_activo is defined and proyecto_activo else (request.state.proyecto_activo if request.state.proyecto_activo else None) %}
-    {% set _proys = proyectos_del_usuario if proyectos_del_usuario is defined else (request.state.proyectos_del_usuario if request.state.proyectos_del_usuario is defined else []) %}
-    {% if _pa and _proys and _proys|length > 1 %}
-    {# Switcher dropdown — solo si tiene >1 proyecto #}
-    <div class="topbar-center" style="position:relative">
-        <button type="button" onclick="document.getElementById('proy-drop').classList.toggle('open')"
-                style="display:flex;align-items:center;gap:8px;background:transparent;border:1px solid var(--bd-strong);
-                       padding:5px 12px;border-radius:99px;cursor:pointer;color:inherit;font-family:inherit">
-            <span class="proyecto-dot" style="background: {{ _pa.color_principal or '#10B981' }}; color: {{ _pa.color_principal or '#10B981' }};"></span>
-            <span class="label">Proyecto</span>
-            <span style="font-weight: 700;">{{ _pa.nombre|truncate(24) }}</span>
-            <i class="fa-solid fa-chevron-down" style="font-size:.7rem;opacity:.6"></i>
-        </button>
-        <div id="proy-drop" class="proy-drop" style="display:none;position:absolute;top:calc(100% + 6px);left:0;
-                        background:var(--bg-card);border:1px solid var(--bd-strong);border-radius:10px;
-                        box-shadow:0 12px 32px rgba(0,0,0,.16);padding:6px;min-width:260px;z-index:100">
-            <div style="padding:8px 10px;font-size:.68rem;font-weight:700;color:var(--text-faint);
-                        text-transform:uppercase;letter-spacing:1px">Cambiar proyecto activo</div>
-            {% for p in _proys %}
-                <a href="/switch/{{ p.id }}" style="display:flex;align-items:center;gap:10px;
-                   padding:10px;border-radius:8px;text-decoration:none;color:inherit;
-                   {% if p.id == _pa.id %}background:var(--accent-soft){% endif %}">
-                    <span style="width:10px;height:10px;border-radius:50%;background:{{ p.color_principal or '#10B981' }};flex-shrink:0"></span>
-                    <div style="flex:1;min-width:0">
-                        <div style="font-weight:700;font-size:.88rem">{{ p.nombre }}</div>
-                        <div style="font-size:.72rem;opacity:.65">{{ p.rol }} · {{ (p.sistemas|length if p.sistemas else 'todos')|string }} sistemas</div>
-                    </div>
-                    {% if p.id == _pa.id %}<i class="fa-solid fa-check" style="color:var(--accent)"></i>{% endif %}
-                </a>
-            {% endfor %}
-        </div>
-    </div>
-    <style>
-        .proy-drop.open { display: block !important; }
-    </style>
-    <script>
-    document.addEventListener('click', function(e) {
-        var drop = document.getElementById('proy-drop');
-        if (!drop) return;
-        if (!drop.classList.contains('open')) return;
-        var wrapper = drop.closest('.topbar-center');
-        if (wrapper && !wrapper.contains(e.target)) drop.classList.remove('open');
-    });
-    </script>
-    {% elif _pa %}
-    <div class="topbar-center" title="Proyecto activo — único proyecto">
+    {% if _pa %}
+    <div class="topbar-center" title="Proyecto activo (se cambia en el Hub)">
         <span class="proyecto-dot" style="background: {{ _pa.color_principal or '#10B981' }}; color: {{ _pa.color_principal or '#10B981' }};"></span>
         <span class="label">Proyecto</span>
         <span style="font-weight: 700;">{{ _pa.nombre|truncate(28) }}</span>
@@ -536,9 +497,14 @@ a:hover { text-decoration: underline; }
     {% endif %}
 
     <div class="topbar-right">
-        {% if session.rol_global == 'admin' %}
-        <a href="/admin/proyectos" class="btn btn-ghost btn-sm"><i class="fa-solid fa-folder-tree"></i> Proyectos</a>
-        <a href="/admin/usuarios" class="btn btn-ghost btn-sm"><i class="fa-solid fa-users-gear"></i> Usuarios</a>
+        {# Fix auditoria Opus 4.8: el admin de proyectos/usuarios vive en el
+           Hub, NO en este satelite. Antes habia botones a /admin/proyectos y
+           /admin/usuarios que daban 404 aqui. Reemplazados por link al Hub. #}
+        {% set _hub = request.state.hub_url if request.state.hub_url is defined else '' %}
+        {% if _hub %}
+        <a href="{{ _hub }}/" class="btn btn-ghost btn-sm" title="Volver al Hub central">
+            <i class="fa-solid fa-grip"></i> Hub
+        </a>
         {% endif %}
         <span class="user-chip" title="{{ session.nombre_completo or session.username }}">
             <span class="avatar">{{ (session.username[:2] if session.username else 'U')|upper }}</span>

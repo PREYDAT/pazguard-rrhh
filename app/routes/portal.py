@@ -23,7 +23,9 @@ async def portal(request: Request):
     proyecto_id = proyecto['id'] if proyecto else None
 
     stats = db_rrhh.stats_compliance(proyecto_id=proyecto_id)
-    vencimientos = db_rrhh.vencimientos_proximos(dias_horizonte=90)
+    # FIX auditoria Opus 4.8: pasar proyecto_id para no filtrar vencimientos
+    # de otros proyectos/contratos (fuga cross-tenant).
+    vencimientos = db_rrhh.vencimientos_proximos(dias_horizonte=90, proyecto_id=proyecto_id)
 
     # Calcular semaforo global
     vencidos = stats['modalidades']['vencidas'] + stats['fianzas']['vencidas']

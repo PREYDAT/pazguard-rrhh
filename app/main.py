@@ -124,6 +124,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return RedirectResponse('/login?next=' + path, status_code=303)
 
         request.state.session = session
+        # hub_url disponible para base.html (link "volver al Hub").
+        request.state.hub_url = os.environ.get('PAZGUARD_HUB_URL', '').rstrip('/')
         request.state.proyecto_activo = None
         if session.get('proyecto_activo_id'):
             try:

@@ -269,25 +269,34 @@ def registrar_alerta(entidad_tipo: str, entidad_id: int,
 # Helpers de vencimientos
 # ═════════════════════════════════════════════════════════════
 
-def vencimientos_proximos(dias_horizonte: int = 90):
+def vencimientos_proximos(dias_horizonte: int = 90, proyecto_id: Optional[int] = None):
     """Retorna lista unificada de modalidades + fianzas que vencen pronto.
 
     Cada item es dict con: tipo, id, descripcion, fecha_vencimiento, dias_restantes.
+
+    FIX auditoria Opus 4.8 (fuga cross-tenant): si se pasa proyecto_id, filtra
+    SOLO los vencimientos de ese proyecto. El dashboard debe pasar siempre el
+    proyecto activo para no mostrar vencimientos de otros proyectos/contratos.
+    El scheduler de alertas pasa proyecto_id=None a proposito (alerta de todos).
     """
     hoy = date.today()
     horizonte = hoy + timedelta(days=dias_horizonte)
     items = []
 
+    # Filtro de proyecto opcional (mismo patron para ambas queries)
+    filtro_proy = " AND proyecto_id = %s" if proyecto_id is not None else ""
+
     with get_conn() as conn:
         # Modalidades
+        params = [horizonte] + ([proyecto_id] if proyecto_id is not None else [])
         rows = conn.execute(
-            """SELECT id, nombre, codigo, fecha_vencimiento, resolucion_sucamec
+            f"""SELECT id, nombre, codigo, fecha_vencimiento, resolucion_sucamec
                FROM rrhh_modalidad
                WHERE activa = TRUE
                  AND fecha_vencimiento IS NOT NULL
-                 AND fecha_vencimiento <= %s
+                 AND fecha_vencimiento <= %s{filtro_proy}
                ORDER BY fecha_vencimiento""",
-            (horizonte,)
+            tuple(params)
         ).fetchall()
         for r in rows:
             items.append({
@@ -299,13 +308,14 @@ def vencimientos_proximos(dias_horizonte: int = 90):
             })
 
         # Fianzas
+        params = [horizonte] + ([proyecto_id] if proyecto_id is not None else [])
         rows = conn.execute(
-            """SELECT id, banco, numero_carta, monto, moneda, fecha_vencimiento
+            f"""SELECT id, banco, numero_carta, monto, moneda, fecha_vencimiento
                FROM rrhh_carta_fianza
                WHERE estado = 'vigente'
-                 AND fecha_vencimiento <= %s
+                 AND fecha_vencimiento <= %s{filtro_proy}
                ORDER BY fecha_vencimiento""",
-            (horizonte,)
+            tuple(params)
         ).fetchall()
         for r in rows:
             items.append({

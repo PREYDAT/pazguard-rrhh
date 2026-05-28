@@ -41,12 +41,8 @@
                 <td>
                     {% if not m.activa %}
                     <span class="badge">inactiva</span>
-                    {% elif m.fecha_vencimiento %}
-                        {% set dias = (m.fecha_vencimiento - (m.creada_en|string)[:10]|trim).days if false else None %}
-                        {# Simplifico: dejo a la card del portal calcular dias #}
-                        <span class="badge badge-success">activa</span>
                     {% else %}
-                        <span class="badge badge-success">activa</span>
+                    <span class="badge badge-success">activa</span>
                     {% endif %}
                 </td>
                 <td><a href="/modalidades/{{ m.id }}" class="btn btn-sm">Ver</a></td>
