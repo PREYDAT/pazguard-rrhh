@@ -12,6 +12,10 @@
     </a>
 </div>
 
+{% if error %}
+<div class="alert alert-error"><i class="fa-solid fa-triangle-exclamation"></i> {{ error }}</div>
+{% endif %}
+
 {% if modalidades %}
 <div class="card" style="padding:0;overflow:hidden">
     <table>

@@ -29,6 +29,13 @@ async def lifespan(app: FastAPI):
 
         def _bg_migrate():
             try:
+                # FIX auditoria Opus 4.8 (P1-2): asegurar tablas del core
+                # (proyectos, usuarios_global) ANTES de las rrhh_*, que tienen
+                # FK a ellas. Si el satelite arranca antes que el hub haya
+                # migrado el core, las rrhh_* fallarian silenciosamente.
+                from pazguard_core import migrations as core_migrations
+                core_migrations.run()
+                logger.info("Core migrations OK (pre-requisito de rrhh_*)")
                 from app.services.database_rrhh import run_migrations
                 run_migrations()
                 logger.info("Migrations rrhh_* OK")
@@ -137,12 +144,30 @@ class AuthMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+# FIX auditoria Opus 4.8 (P3): Content-Security-Policy. 'unsafe-inline' es
+# necesario por ahora (los templates usan style="" y onclick inline); a
+# futuro endurecer con nonces. frame-ancestors 'none' + X-Frame-Options
+# cubren clickjacking. Permite FontAwesome (cdnjs) y Google Fonts.
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
+    "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
+    "img-src 'self' data:; "
+    "connect-src 'self'; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['X-Frame-Options'] = 'DENY'
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Content-Security-Policy'] = _CSP
         return response
 
 

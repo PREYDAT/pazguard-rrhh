@@ -20,12 +20,13 @@ templates = Jinja2Templates(directory=os.path.join(APP_DIR, 'templates'))
 async def portal(request: Request):
     session = request.state.session
     proyecto = request.state.proyecto_activo
-    proyecto_id = proyecto['id'] if proyecto else None
 
-    stats = db_rrhh.stats_compliance(proyecto_id=proyecto_id)
-    # FIX auditoria Opus 4.8: pasar proyecto_id para no filtrar vencimientos
-    # de otros proyectos/contratos (fuga cross-tenant).
-    vencimientos = db_rrhh.vencimientos_proximos(dias_horizonte=90, proyecto_id=proyecto_id)
+    # FIX auditoria Opus 4.8 (P1-1): modalidades y carta fianza son nivel
+    # EMPRESA (una autorizacion SUCAMEC, una fianza para toda la operacion),
+    # no por proyecto/contrato. Por eso stats y vencimientos NO se filtran por
+    # proyecto. Las vigencias de PERSONAL (Fase 4.2) si seran por proyecto.
+    stats = db_rrhh.stats_compliance()
+    vencimientos = db_rrhh.vencimientos_proximos(dias_horizonte=90)
 
     # Calcular semaforo global
     vencidos = stats['modalidades']['vencidas'] + stats['fianzas']['vencidas']

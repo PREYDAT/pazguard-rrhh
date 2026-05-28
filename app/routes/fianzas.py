@@ -39,8 +39,7 @@ def _parse_float(s: str, default: float = 0.0):
 async def listar(request: Request):
     session = request.state.session
     proyecto = request.state.proyecto_activo
-    proyecto_id = proyecto['id'] if proyecto else None
-    fianzas = db_rrhh.listar_fianzas(proyecto_id=proyecto_id)
+    fianzas = db_rrhh.listar_fianzas()
     return templates.TemplateResponse(
         request=request,
         name='fianzas_list.html',
@@ -85,10 +84,9 @@ async def crear(
     archivo_pdf_url: str = Form(''),
     observaciones: str = Form(''),
 ):
+    # FIX auditoria Opus 4.8 (P1-1): carta fianza es nivel EMPRESA, no
+    # requiere proyecto activo.
     session = request.state.session
-    proyecto = request.state.proyecto_activo
-    if not proyecto:
-        raise HTTPException(status_code=400, detail='Selecciona un proyecto antes')
 
     fe = _parse_date(fecha_emision)
     fv = _parse_date(fecha_vencimiento)
@@ -98,7 +96,6 @@ async def crear(
         raise HTTPException(status_code=400, detail='Vencimiento debe ser posterior a emision')
 
     fid = db_rrhh.crear_fianza(
-        proyecto_id=proyecto['id'],
         banco=banco.strip(),
         numero_carta=numero_carta.strip() or None,
         monto=_parse_float(monto),

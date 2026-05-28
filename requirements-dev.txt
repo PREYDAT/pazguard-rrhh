@@ -1,0 +1,4 @@
+# Dependencias solo para desarrollo/tests (no se instalan en prod).
+# Correr: pip install -r requirements-dev.txt && pytest -q
+-r requirements.txt
+pytest>=8.0.0

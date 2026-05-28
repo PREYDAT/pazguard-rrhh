@@ -79,6 +79,16 @@ SCHEMA_RRHH = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rrhh_alerta_entidad ON rrhh_alerta_enviada(entidad_tipo, entidad_id)",
+
+    # ── FIX auditoria Opus 4.8 (P1-1): modalidades y carta fianza son
+    #    NIVEL EMPRESA, no por proyecto. Normalizamos proyecto_id a NULL
+    #    (idempotente) y agregamos UNIQUE parcial sobre codigo a nivel
+    #    empresa (el UNIQUE(proyecto_id,codigo) original NO protege con
+    #    proyecto_id=NULL porque en Postgres NULL != NULL en constraints).
+    "UPDATE rrhh_modalidad SET proyecto_id = NULL WHERE proyecto_id IS NOT NULL",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_rrhh_modalidad_codigo_empresa "
+    "ON rrhh_modalidad (codigo) WHERE proyecto_id IS NULL",
+    "UPDATE rrhh_carta_fianza SET proyecto_id = NULL WHERE proyecto_id IS NOT NULL",
 ]
 
 
@@ -104,13 +114,10 @@ def run_migrations():
 # CRUD: Modalidades SUCAMEC
 # ═════════════════════════════════════════════════════════════
 
-def listar_modalidades(proyecto_id: Optional[int] = None, solo_activas: bool = True):
-    """Lista modalidades. Filtra por proyecto y activas."""
+def listar_modalidades(solo_activas: bool = True):
+    """Lista modalidades SUCAMEC (nivel empresa, sin filtro de proyecto)."""
     sql = "SELECT * FROM rrhh_modalidad WHERE 1=1"
     params = []
-    if proyecto_id is not None:
-        sql += " AND proyecto_id = %s"
-        params.append(proyecto_id)
     if solo_activas:
         sql += " AND activa = TRUE"
     sql += " ORDER BY fecha_vencimiento NULLS LAST, nombre"
@@ -124,7 +131,7 @@ def get_modalidad(modalidad_id: int):
         return dict(r) if r else None
 
 
-def crear_modalidad(*, proyecto_id: int, codigo: str, nombre: str,
+def crear_modalidad(*, codigo: str, nombre: str,
                      resolucion_sucamec: Optional[str] = None,
                      fecha_otorgamiento: Optional[date] = None,
                      fecha_vencimiento: Optional[date] = None,
@@ -132,18 +139,29 @@ def crear_modalidad(*, proyecto_id: int, codigo: str, nombre: str,
                      archivo_pdf_url: Optional[str] = None,
                      observaciones: Optional[str] = None,
                      creada_por: Optional[int] = None) -> int:
+    """Crea una modalidad SUCAMEC. NIVEL EMPRESA (proyecto_id = NULL).
+
+    FIX auditoria Opus 4.8 (P1-1): las modalidades SUCAMEC pertenecen a
+    PAZGUARD como EMPRESA, no a un proyecto/contrato operativo. La columna
+    proyecto_id queda como NULL (reservada). Si codigo ya existe lanza
+    UniqueViolation -> el caller la captura y muestra mensaje amigable.
+    """
     with get_conn() as conn:
         r = conn.execute(
             """INSERT INTO rrhh_modalidad
                 (proyecto_id, codigo, nombre, resolucion_sucamec,
                  fecha_otorgamiento, fecha_vencimiento, alcance_geografico,
                  archivo_pdf_url, observaciones, creada_por)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
-            (proyecto_id, codigo, nombre, resolucion_sucamec,
+               VALUES (NULL,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+            (codigo, nombre, resolucion_sucamec,
              fecha_otorgamiento, fecha_vencimiento, alcance_geografico,
              archivo_pdf_url, observaciones, creada_por)
         ).fetchone()
         return r['id']
+
+
+class ModalidadDuplicada(Exception):
+    """El codigo de modalidad ya existe (UNIQUE)."""
 
 
 def actualizar_modalidad(modalidad_id: int, **campos):
@@ -172,12 +190,10 @@ def desactivar_modalidad(modalidad_id: int) -> bool:
 # CRUD: Carta Fianza
 # ═════════════════════════════════════════════════════════════
 
-def listar_fianzas(proyecto_id: Optional[int] = None, estado: Optional[str] = None):
+def listar_fianzas(estado: Optional[str] = None):
+    """Lista cartas fianza (nivel empresa, sin filtro de proyecto)."""
     sql = "SELECT * FROM rrhh_carta_fianza WHERE 1=1"
     params = []
-    if proyecto_id is not None:
-        sql += " AND proyecto_id = %s"
-        params.append(proyecto_id)
     if estado:
         sql += " AND estado = %s"
         params.append(estado)
@@ -192,7 +208,7 @@ def get_fianza(fianza_id: int):
         return dict(r) if r else None
 
 
-def crear_fianza(*, proyecto_id: int, banco: str, monto: float,
+def crear_fianza(*, banco: str, monto: float,
                   fecha_emision: date, fecha_vencimiento: date,
                   numero_carta: Optional[str] = None,
                   moneda: str = 'PEN',
@@ -201,14 +217,19 @@ def crear_fianza(*, proyecto_id: int, banco: str, monto: float,
                   archivo_pdf_url: Optional[str] = None,
                   observaciones: Optional[str] = None,
                   creada_por: Optional[int] = None) -> int:
+    """Crea una carta fianza. NIVEL EMPRESA (proyecto_id = NULL).
+
+    FIX auditoria Opus 4.8 (P1-1): la carta fianza de 5 UIT respalda a
+    PAZGUARD como empresa ante SUCAMEC, no a un contrato/proyecto.
+    """
     with get_conn() as conn:
         r = conn.execute(
             """INSERT INTO rrhh_carta_fianza
                 (proyecto_id, banco, numero_carta, monto, moneda,
                  uit_referencia, num_uit, fecha_emision, fecha_vencimiento,
                  archivo_pdf_url, observaciones, creada_por)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
-            (proyecto_id, banco, numero_carta, monto, moneda,
+               VALUES (NULL,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+            (banco, numero_carta, monto, moneda,
              uit_referencia, num_uit, fecha_emision, fecha_vencimiento,
              archivo_pdf_url, observaciones, creada_por)
         ).fetchone()
@@ -269,34 +290,31 @@ def registrar_alerta(entidad_tipo: str, entidad_id: int,
 # Helpers de vencimientos
 # ═════════════════════════════════════════════════════════════
 
-def vencimientos_proximos(dias_horizonte: int = 90, proyecto_id: Optional[int] = None):
+def vencimientos_proximos(dias_horizonte: int = 90):
     """Retorna lista unificada de modalidades + fianzas que vencen pronto.
 
     Cada item es dict con: tipo, id, descripcion, fecha_vencimiento, dias_restantes.
 
-    FIX auditoria Opus 4.8 (fuga cross-tenant): si se pasa proyecto_id, filtra
-    SOLO los vencimientos de ese proyecto. El dashboard debe pasar siempre el
-    proyecto activo para no mostrar vencimientos de otros proyectos/contratos.
-    El scheduler de alertas pasa proyecto_id=None a proposito (alerta de todos).
+    NIVEL EMPRESA (fix auditoria Opus 4.8 P1-1): modalidades y carta fianza son
+    de PAZGUARD como empresa, NO por proyecto/contrato. Por eso NO se filtra por
+    proyecto: una sola autorizacion y una sola fianza respaldan a toda la
+    operacion. Cuando se agreguen vigencias de PERSONAL (Fase 4.2, que SI son
+    por proyecto/asignacion), esas usaran su propio filtro por proyecto.
     """
     hoy = date.today()
     horizonte = hoy + timedelta(days=dias_horizonte)
     items = []
 
-    # Filtro de proyecto opcional (mismo patron para ambas queries)
-    filtro_proy = " AND proyecto_id = %s" if proyecto_id is not None else ""
-
     with get_conn() as conn:
-        # Modalidades
-        params = [horizonte] + ([proyecto_id] if proyecto_id is not None else [])
+        # Modalidades (empresa)
         rows = conn.execute(
-            f"""SELECT id, nombre, codigo, fecha_vencimiento, resolucion_sucamec
+            """SELECT id, nombre, codigo, fecha_vencimiento, resolucion_sucamec
                FROM rrhh_modalidad
                WHERE activa = TRUE
                  AND fecha_vencimiento IS NOT NULL
-                 AND fecha_vencimiento <= %s{filtro_proy}
+                 AND fecha_vencimiento <= %s
                ORDER BY fecha_vencimiento""",
-            tuple(params)
+            (horizonte,)
         ).fetchall()
         for r in rows:
             items.append({
@@ -307,15 +325,14 @@ def vencimientos_proximos(dias_horizonte: int = 90, proyecto_id: Optional[int] =
                 'dias_restantes': (r['fecha_vencimiento'] - hoy).days,
             })
 
-        # Fianzas
-        params = [horizonte] + ([proyecto_id] if proyecto_id is not None else [])
+        # Fianzas (empresa)
         rows = conn.execute(
-            f"""SELECT id, banco, numero_carta, monto, moneda, fecha_vencimiento
+            """SELECT id, banco, numero_carta, monto, moneda, fecha_vencimiento
                FROM rrhh_carta_fianza
                WHERE estado = 'vigente'
-                 AND fecha_vencimiento <= %s{filtro_proy}
+                 AND fecha_vencimiento <= %s
                ORDER BY fecha_vencimiento""",
-            tuple(params)
+            (horizonte,)
         ).fetchall()
         for r in rows:
             items.append({
@@ -330,49 +347,37 @@ def vencimientos_proximos(dias_horizonte: int = 90, proyecto_id: Optional[int] =
     return sorted(items, key=lambda x: x['dias_restantes'])
 
 
-def stats_compliance(proyecto_id: Optional[int] = None) -> dict:
-    """Retorna conteos para el dashboard del semaforo."""
+def stats_compliance() -> dict:
+    """Conteos para el dashboard del semaforo (nivel empresa).
+
+    FIX auditoria Opus 4.8 (P3): de 6 queries separadas a 2 (una por tabla)
+    usando COUNT(*) FILTER. modalidades/fianza son de empresa -> sin filtro
+    de proyecto.
+    """
     with get_conn() as conn:
-        where_proy = "AND proyecto_id = %s" if proyecto_id else ""
-        params = (proyecto_id,) if proyecto_id else ()
+        m = conn.execute(
+            """SELECT
+                 COUNT(*) FILTER (WHERE activa) AS vigentes,
+                 COUNT(*) FILTER (WHERE activa AND fecha_vencimiento
+                     BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '60 days') AS por_vencer,
+                 COUNT(*) FILTER (WHERE activa AND fecha_vencimiento < CURRENT_DATE) AS vencidas
+               FROM rrhh_modalidad"""
+        ).fetchone()
+        f = conn.execute(
+            """SELECT
+                 COUNT(*) FILTER (WHERE estado = 'vigente') AS vigentes,
+                 COUNT(*) FILTER (WHERE estado = 'vigente' AND fecha_vencimiento
+                     BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '60 days') AS por_vencer,
+                 COUNT(*) FILTER (WHERE estado = 'vigente' AND fecha_vencimiento < CURRENT_DATE) AS vencidas
+               FROM rrhh_carta_fianza"""
+        ).fetchone()
 
-        mod_vigentes = conn.execute(
-            f"SELECT COUNT(*) AS n FROM rrhh_modalidad "
-            f"WHERE activa = TRUE {where_proy}",
-            params
-        ).fetchone()['n']
-
-        mod_por_vencer = conn.execute(
-            f"SELECT COUNT(*) AS n FROM rrhh_modalidad "
-            f"WHERE activa = TRUE AND fecha_vencimiento BETWEEN CURRENT_DATE "
-            f"AND CURRENT_DATE + INTERVAL '60 days' {where_proy}",
-            params
-        ).fetchone()['n']
-
-        mod_vencidas = conn.execute(
-            f"SELECT COUNT(*) AS n FROM rrhh_modalidad "
-            f"WHERE activa = TRUE AND fecha_vencimiento < CURRENT_DATE {where_proy}",
-            params
-        ).fetchone()['n']
-
-        fianzas_vigentes = conn.execute(
-            f"SELECT COUNT(*) AS n FROM rrhh_carta_fianza "
-            f"WHERE estado = 'vigente' {where_proy}",
-            params
-        ).fetchone()['n']
-
-        fianzas_por_vencer = conn.execute(
-            f"SELECT COUNT(*) AS n FROM rrhh_carta_fianza "
-            f"WHERE estado = 'vigente' AND fecha_vencimiento BETWEEN CURRENT_DATE "
-            f"AND CURRENT_DATE + INTERVAL '60 days' {where_proy}",
-            params
-        ).fetchone()['n']
-
-        fianzas_vencidas = conn.execute(
-            f"SELECT COUNT(*) AS n FROM rrhh_carta_fianza "
-            f"WHERE estado = 'vigente' AND fecha_vencimiento < CURRENT_DATE {where_proy}",
-            params
-        ).fetchone()['n']
+        mod_vigentes = m['vigentes']
+        mod_por_vencer = m['por_vencer']
+        mod_vencidas = m['vencidas']
+        fianzas_vigentes = f['vigentes']
+        fianzas_por_vencer = f['por_vencer']
+        fianzas_vencidas = f['vencidas']
 
     return {
         'modalidades': {

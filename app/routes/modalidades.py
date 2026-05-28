@@ -3,9 +3,17 @@ import logging
 import os
 from datetime import datetime
 
+from urllib.parse import quote
+
 from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
+
+try:
+    from psycopg import errors as pg_errors
+    _UNIQUE_EXC = pg_errors.UniqueViolation
+except Exception:  # pragma: no cover
+    _UNIQUE_EXC = Exception
 
 from app.services import database_rrhh as db_rrhh
 from app.config import MODALIDADES_SUCAMEC
@@ -27,19 +35,18 @@ def _parse_date(s: str):
 
 
 @router.get('/modalidades')
-async def listar(request: Request):
+async def listar(request: Request, error: str = ''):
     session = request.state.session
-    proyecto = request.state.proyecto_activo
-    proyecto_id = proyecto['id'] if proyecto else None
-    modalidades = db_rrhh.listar_modalidades(proyecto_id=proyecto_id, solo_activas=False)
+    modalidades = db_rrhh.listar_modalidades(solo_activas=False)
     return templates.TemplateResponse(
         request=request,
         name='modalidades_list.html',
         context={
             'session': session,
-            'proyecto_activo': proyecto,
+            'proyecto_activo': request.state.proyecto_activo,
             'modalidades': modalidades,
             'catalogo': MODALIDADES_SUCAMEC,
+            'error': error,
         },
     )
 
@@ -70,22 +77,25 @@ async def crear(
     archivo_pdf_url: str = Form(''),
     observaciones: str = Form(''),
 ):
+    # FIX auditoria Opus 4.8 (P1-1): modalidades son nivel EMPRESA, no
+    # requieren proyecto activo. (P2-2): capturar duplicado con mensaje claro.
     session = request.state.session
-    proyecto = request.state.proyecto_activo
-    if not proyecto:
-        raise HTTPException(status_code=400, detail='Selecciona un proyecto antes')
-    mid = db_rrhh.crear_modalidad(
-        proyecto_id=proyecto['id'],
-        codigo=codigo.strip().upper(),
-        nombre=nombre.strip(),
-        resolucion_sucamec=resolucion_sucamec.strip() or None,
-        fecha_otorgamiento=_parse_date(fecha_otorgamiento),
-        fecha_vencimiento=_parse_date(fecha_vencimiento),
-        alcance_geografico=alcance_geografico.strip() or None,
-        archivo_pdf_url=archivo_pdf_url.strip() or None,
-        observaciones=observaciones.strip() or None,
-        creada_por=session.get('usuario_id'),
-    )
+    cod = codigo.strip().upper()
+    try:
+        mid = db_rrhh.crear_modalidad(
+            codigo=cod,
+            nombre=nombre.strip(),
+            resolucion_sucamec=resolucion_sucamec.strip() or None,
+            fecha_otorgamiento=_parse_date(fecha_otorgamiento),
+            fecha_vencimiento=_parse_date(fecha_vencimiento),
+            alcance_geografico=alcance_geografico.strip() or None,
+            archivo_pdf_url=archivo_pdf_url.strip() or None,
+            observaciones=observaciones.strip() or None,
+            creada_por=session.get('usuario_id'),
+        )
+    except _UNIQUE_EXC:
+        msg = quote(f'La modalidad "{cod}" ya esta registrada.')
+        return RedirectResponse(f'/modalidades?error={msg}', status_code=303)
     return RedirectResponse(f'/modalidades/{mid}', status_code=303)
 
 
