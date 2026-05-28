@@ -24,7 +24,7 @@
         <div class="form-group">
             <label>N° de carta</label>
             <input type="text" name="numero_carta"
-                   value="{{ fianza.numero_carta if fianza else '' }}"
+                   value="{{ (fianza.numero_carta if fianza else '') or '' }}"
                    placeholder="Ej: CF-2026-001234">
         </div>
     </div>
@@ -74,13 +74,13 @@
     <div class="form-group">
         <label>URL del PDF de la carta (Drive, Box, etc.)</label>
         <input type="url" name="archivo_pdf_url"
-               value="{{ fianza.archivo_pdf_url if fianza else '' }}"
+               value="{{ (fianza.archivo_pdf_url if fianza else '') or '' }}"
                placeholder="https://...">
     </div>
 
     <div class="form-group">
         <label>Observaciones</label>
-        <textarea name="observaciones" rows="4">{{ fianza.observaciones if fianza else '' }}</textarea>
+        <textarea name="observaciones" rows="4">{{ (fianza.observaciones if fianza else '') or '' }}</textarea>
     </div>
 
     {% if fianza %}

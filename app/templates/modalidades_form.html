@@ -36,13 +36,13 @@
         <div class="form-group">
             <label>Resolucion SUCAMEC</label>
             <input type="text" name="resolucion_sucamec"
-                   value="{{ modalidad.resolucion_sucamec if modalidad else '' }}"
+                   value="{{ (modalidad.resolucion_sucamec if modalidad else '') or '' }}"
                    placeholder="Ej: RES-DG-N° 1234-2026">
         </div>
         <div class="form-group">
             <label>Alcance geografico</label>
             <input type="text" name="alcance_geografico"
-                   value="{{ modalidad.alcance_geografico if modalidad else '' }}"
+                   value="{{ (modalidad.alcance_geografico if modalidad else '') or '' }}"
                    placeholder="Ej: Nacional / Lima Metropolitana">
         </div>
     </div>
@@ -63,13 +63,13 @@
     <div class="form-group">
         <label>URL del PDF de resolucion (Drive, Box, etc.)</label>
         <input type="url" name="archivo_pdf_url"
-               value="{{ modalidad.archivo_pdf_url if modalidad else '' }}"
+               value="{{ (modalidad.archivo_pdf_url if modalidad else '') or '' }}"
                placeholder="https://...">
     </div>
 
     <div class="form-group">
         <label>Observaciones</label>
-        <textarea name="observaciones" rows="4">{{ modalidad.observaciones if modalidad else '' }}</textarea>
+        <textarea name="observaciones" rows="4">{{ (modalidad.observaciones if modalidad else '') or '' }}</textarea>
     </div>
 
     {% if modalidad %}
