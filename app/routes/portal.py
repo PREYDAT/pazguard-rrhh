@@ -29,21 +29,32 @@ async def portal(request: Request):
     stats_personal = db_rrhh.stats_personal()
     vencimientos = db_rrhh.vencimientos_proximos(dias_horizonte=90)
 
-    # Calcular semaforo global (incluye personal no habilitado)
-    vencidos = (stats['modalidades']['vencidas'] + stats['fianzas']['vencidas']
-                + stats_personal['no_habilitados'])
-    por_vencer = (stats['modalidades']['por_vencer'] + stats['fianzas']['por_vencer']
-                  + stats_personal['atencion'])
+    # Semaforo global. Distingue documentos vencidos (modalidad/fianza) de
+    # personal no habilitado, para que el texto sea preciso (compliance).
+    docs_vencidos = stats['modalidades']['vencidas'] + stats['fianzas']['vencidas']
+    docs_por_vencer = stats['modalidades']['por_vencer'] + stats['fianzas']['por_vencer']
+    no_habilitados = stats_personal['no_habilitados']
+    personal_atencion = stats_personal['atencion']
 
-    if vencidos > 0:
+    if docs_vencidos > 0 or no_habilitados > 0:
         semaforo = 'rojo'
-        semaforo_texto = f'{vencidos} item(s) vencido(s)'
-    elif por_vencer > 0:
+        partes = []
+        if docs_vencidos:
+            partes.append(f'{docs_vencidos} documento(s) vencido(s)')
+        if no_habilitados:
+            partes.append(f'{no_habilitados} vigilante(s) NO habilitado(s)')
+        semaforo_texto = ' · '.join(partes)
+    elif docs_por_vencer > 0 or personal_atencion > 0:
         semaforo = 'ambar'
-        semaforo_texto = f'{por_vencer} item(s) por vencer (60d)'
+        partes = []
+        if docs_por_vencer:
+            partes.append(f'{docs_por_vencer} por vencer (60d)')
+        if personal_atencion:
+            partes.append(f'{personal_atencion} vigilante(s) en atención')
+        semaforo_texto = ' · '.join(partes)
     else:
         semaforo = 'verde'
-        semaforo_texto = 'Todo vigente'
+        semaforo_texto = 'Todo vigente y habilitado'
 
     # Saludo segun hora Peru
     hora_peru = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=-5))).hour
