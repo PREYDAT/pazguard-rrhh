@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}Cartas Fianza · PAZGUARD RRHH{% endblock %}
+{% block content %}
+
+<div class="flex-between" style="margin-bottom:18px">
+    <div>
+        <h1>Cartas Fianza SUCAMEC</h1>
+        <p class="subtitle">
+            Garantia minima: <strong>5 UIT</strong> ({{ anio_uit }}: S/ {{ '{:,.0f}'.format(monto_minimo) }})
+        </p>
+    </div>
+    <a href="/cartas-fianza/nueva" class="btn btn-primary">
+        <i class="fa-solid fa-plus"></i> Nueva carta fianza
+    </a>
+</div>
+
+{% if fianzas %}
+<div class="card" style="padding:0;overflow:hidden">
+    <table>
+        <thead>
+            <tr>
+                <th>Banco</th>
+                <th>N° carta</th>
+                <th>Monto</th>
+                <th>UIT</th>
+                <th>Emision</th>
+                <th>Vence</th>
+                <th>Estado</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in fianzas %}
+            <tr>
+                <td><strong>{{ f.banco }}</strong></td>
+                <td class="mono">{{ f.numero_carta or '—' }}</td>
+                <td class="mono">
+                    {{ f.moneda }} {{ '{:,.2f}'.format(f.monto) }}
+                    {% if f.monto < monto_minimo and f.moneda == 'PEN' %}
+                    <i class="fa-solid fa-triangle-exclamation" style="color:var(--danger)"
+                       title="Bajo el minimo SUCAMEC"></i>
+                    {% endif %}
+                </td>
+                <td class="mono">{{ '{:.1f}'.format(f.num_uit) if f.num_uit else '—' }}</td>
+                <td class="mono">{{ f.fecha_emision.strftime('%d/%m/%Y') if f.fecha_emision else '—' }}</td>
+                <td class="mono">{{ f.fecha_vencimiento.strftime('%d/%m/%Y') if f.fecha_vencimiento else '—' }}</td>
+                <td>
+                    {% if f.estado == 'vigente' %}
+                    <span class="badge badge-success">vigente</span>
+                    {% elif f.estado == 'vencido' %}
+                    <span class="badge badge-danger">vencida</span>
+                    {% else %}
+                    <span class="badge">{{ f.estado }}</span>
+                    {% endif %}
+                </td>
+                <td><a href="/cartas-fianza/{{ f.id }}" class="btn btn-sm">Ver</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:36px 22px">
+    <i class="fa-solid fa-file-shield" style="font-size:48px;color:var(--text-muted);margin-bottom:14px"></i>
+    <h3 style="margin:0 0 6px">Sin cartas fianza registradas</h3>
+    <p style="margin:0 0 18px;color:var(--text-muted)">
+        SUCAMEC exige carta fianza vigente como requisito operativo (DL 1213).
+    </p>
+    <a href="/cartas-fianza/nueva" class="btn btn-primary">
+        <i class="fa-solid fa-plus"></i> Registrar primera carta
+    </a>
+</div>
+{% endif %}
+
+{% endblock %}

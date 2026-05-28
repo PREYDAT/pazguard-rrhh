@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% block title %}RRHH/SUCAMEC · PAZGUARD{% endblock %}
+{% block content %}
+
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px">
+    <div>
+        <h1>{{ saludo }}, {{ session.username }}</h1>
+        <p class="subtitle">Sistema RRHH / SUCAMEC — vigencias, fianzas, compliance</p>
+    </div>
+    <div class="card" style="padding:14px 22px;margin:0;display:flex;align-items:center;gap:14px">
+        {% if semaforo == 'verde' %}
+            <span style="font-size:32px">🟢</span>
+            <div>
+                <div style="font-weight:800;color:var(--success)">Compliance OK</div>
+                <div style="font-size:.8rem;color:var(--text-muted)">{{ semaforo_texto }}</div>
+            </div>
+        {% elif semaforo == 'ambar' %}
+            <span style="font-size:32px">🟡</span>
+            <div>
+                <div style="font-weight:800;color:var(--warning)">Atencion</div>
+                <div style="font-size:.8rem;color:var(--text-muted)">{{ semaforo_texto }}</div>
+            </div>
+        {% else %}
+            <span style="font-size:32px">🔴</span>
+            <div>
+                <div style="font-weight:800;color:var(--danger)">Critico</div>
+                <div style="font-size:.8rem;color:var(--text-muted)">{{ semaforo_texto }}</div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:24px 0">
+    <a href="/modalidades" class="card" style="text-decoration:none;color:inherit">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+            <div>
+                <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">Modalidades SUCAMEC</div>
+                <div style="font-size:2rem;font-weight:800;color:var(--accent);margin-top:6px">{{ stats.modalidades.vigentes }}</div>
+                <div style="font-size:.85rem;color:var(--text-soft)">activas</div>
+            </div>
+            <i class="fa-solid fa-shield-halved" style="font-size:1.8rem;color:var(--accent-light)"></i>
+        </div>
+        {% if stats.modalidades.por_vencer > 0 or stats.modalidades.vencidas > 0 %}
+        <div style="display:flex;gap:10px;margin-top:14px;font-size:.78rem">
+            {% if stats.modalidades.por_vencer > 0 %}
+            <span class="badge badge-warn">{{ stats.modalidades.por_vencer }} por vencer</span>
+            {% endif %}
+            {% if stats.modalidades.vencidas > 0 %}
+            <span class="badge badge-danger">{{ stats.modalidades.vencidas }} vencidas</span>
+            {% endif %}
+        </div>
+        {% endif %}
+    </a>
+
+    <a href="/cartas-fianza" class="card" style="text-decoration:none;color:inherit">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+            <div>
+                <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">Cartas Fianza</div>
+                <div style="font-size:2rem;font-weight:800;color:var(--accent);margin-top:6px">{{ stats.fianzas.vigentes }}</div>
+                <div style="font-size:.85rem;color:var(--text-soft)">vigentes</div>
+            </div>
+            <i class="fa-solid fa-file-shield" style="font-size:1.8rem;color:var(--accent-warm)"></i>
+        </div>
+        {% if stats.fianzas.por_vencer > 0 or stats.fianzas.vencidas > 0 %}
+        <div style="display:flex;gap:10px;margin-top:14px;font-size:.78rem">
+            {% if stats.fianzas.por_vencer > 0 %}
+            <span class="badge badge-warn">{{ stats.fianzas.por_vencer }} por vencer</span>
+            {% endif %}
+            {% if stats.fianzas.vencidas > 0 %}
+            <span class="badge badge-danger">{{ stats.fianzas.vencidas }} vencidas</span>
+            {% endif %}
+        </div>
+        {% endif %}
+    </a>
+
+    <div class="card">
+        <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">UIT {{ anio_uit }}</div>
+        <div style="font-size:1.7rem;font-weight:800;color:var(--accent);margin-top:6px">S/ {{ '{:,.0f}'.format(uit_vigente) }}</div>
+        <div style="font-size:.8rem;color:var(--text-soft)">Minimo fianza (5 UIT): <b>S/ {{ '{:,.0f}'.format(fianza_min_soles) }}</b></div>
+    </div>
+</div>
+
+<h2><i class="fa-solid fa-bell"></i> Proximos vencimientos</h2>
+
+{% if vencimientos %}
+<div class="card" style="padding:0;overflow:hidden">
+    <table>
+        <thead>
+            <tr>
+                <th>Tipo</th>
+                <th>Descripcion</th>
+                <th>Vence</th>
+                <th>Dias</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for v in vencimientos %}
+            <tr>
+                <td>
+                    {% if v.tipo == 'modalidad' %}
+                    <i class="fa-solid fa-shield-halved" style="color:var(--accent)"></i> Modalidad
+                    {% else %}
+                    <i class="fa-solid fa-file-shield" style="color:var(--accent-warm)"></i> Fianza
+                    {% endif %}
+                </td>
+                <td>{{ v.descripcion }}</td>
+                <td class="mono">{{ v.fecha_vencimiento.strftime('%d/%m/%Y') }}</td>
+                <td>
+                    {% if v.dias_restantes < 0 %}
+                        <span class="badge badge-danger">vencida hace {{ -v.dias_restantes }}d</span>
+                    {% elif v.dias_restantes == 0 %}
+                        <span class="badge badge-danger">VENCE HOY</span>
+                    {% elif v.dias_restantes <= 7 %}
+                        <span class="badge badge-danger">{{ v.dias_restantes }}d</span>
+                    {% elif v.dias_restantes <= 30 %}
+                        <span class="badge badge-warn">{{ v.dias_restantes }}d</span>
+                    {% else %}
+                        <span class="badge">{{ v.dias_restantes }}d</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if v.tipo == 'modalidad' %}
+                    <a href="/modalidades/{{ v.id }}" class="btn btn-sm">Ver</a>
+                    {% else %}
+                    <a href="/cartas-fianza/{{ v.id }}" class="btn btn-sm">Ver</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if vencimientos_total > vencimientos|length %}
+<p style="text-align:center;margin-top:14px;color:var(--text-muted);font-size:.85rem">
+    Mostrando {{ vencimientos|length }} de {{ vencimientos_total }} totales en horizonte 90d
+</p>
+{% endif %}
+{% else %}
+<div class="card" style="text-align:center;padding:36px 22px">
+    <i class="fa-solid fa-circle-check" style="font-size:48px;color:var(--success);margin-bottom:14px"></i>
+    <h3 style="margin:0 0 6px">Sin vencimientos proximos</h3>
+    <p style="margin:0;color:var(--text-muted)">Ninguna modalidad o carta fianza vence en los proximos 90 dias.</p>
+</div>
+{% endif %}
+
+<h2 style="margin-top:36px"><i class="fa-solid fa-rocket"></i> Acciones rapidas</h2>
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+    <a href="/modalidades/nueva" class="btn btn-primary">
+        <i class="fa-solid fa-plus"></i> Nueva modalidad
+    </a>
+    <a href="/cartas-fianza/nueva" class="btn btn-primary">
+        <i class="fa-solid fa-plus"></i> Nueva carta fianza
+    </a>
+    <a href="/modalidades" class="btn">
+        <i class="fa-solid fa-list"></i> Ver modalidades
+    </a>
+    <a href="/cartas-fianza" class="btn">
+        <i class="fa-solid fa-list"></i> Ver cartas fianza
+    </a>
+</div>
+
+{% endblock %}

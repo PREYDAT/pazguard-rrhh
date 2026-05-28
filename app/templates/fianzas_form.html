@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Editar' if fianza else 'Nueva' }} carta fianza · PAZGUARD RRHH{% endblock %}
+{% block content %}
+
+<a href="/cartas-fianza" style="font-size:.85rem">← Volver al listado</a>
+
+<h1 style="margin-top:14px">{{ 'Editar' if fianza else 'Nueva' }} carta fianza</h1>
+<p class="subtitle">
+    SUCAMEC exige minimo <strong>5 UIT</strong> = S/ {{ '{:,.0f}'.format(monto_minimo) }} ({{ uit_vigente|int }} S/ × 5)
+</p>
+
+<form method="post" action="{{ '/cartas-fianza/' + fianza.id|string + '/editar' if fianza else '/cartas-fianza/nueva' }}" class="card">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Banco *</label>
+            <select name="banco" required>
+                {% for b in bancos %}
+                <option value="{{ b }}" {% if fianza and fianza.banco == b %}selected{% endif %}>{{ b }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>N° de carta</label>
+            <input type="text" name="numero_carta"
+                   value="{{ fianza.numero_carta if fianza else '' }}"
+                   placeholder="Ej: CF-2026-001234">
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Monto *</label>
+            <input type="number" name="monto" required step="0.01" min="0"
+                   value="{{ fianza.monto if fianza else monto_minimo }}">
+        </div>
+        <div class="form-group">
+            <label>Moneda</label>
+            <select name="moneda">
+                <option value="PEN" {% if not fianza or fianza.moneda == 'PEN' %}selected{% endif %}>PEN (S/)</option>
+                <option value="USD" {% if fianza and fianza.moneda == 'USD' %}selected{% endif %}>USD ($)</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>UIT referencia</label>
+            <input type="number" name="uit_referencia" step="0.01"
+                   value="{{ fianza.uit_referencia if fianza else uit_vigente }}">
+        </div>
+        <div class="form-group">
+            <label>N° de UIT</label>
+            <input type="number" name="num_uit" step="0.1"
+                   value="{{ fianza.num_uit if fianza else 5 }}"
+                   placeholder="Minimo SUCAMEC: 5">
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Fecha emision *</label>
+            <input type="date" name="fecha_emision" required
+                   value="{{ fianza.fecha_emision.strftime('%Y-%m-%d') if fianza and fianza.fecha_emision else '' }}">
+        </div>
+        <div class="form-group">
+            <label>Fecha vencimiento *</label>
+            <input type="date" name="fecha_vencimiento" required
+                   value="{{ fianza.fecha_vencimiento.strftime('%Y-%m-%d') if fianza and fianza.fecha_vencimiento else '' }}">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>URL del PDF de la carta (Drive, Box, etc.)</label>
+        <input type="url" name="archivo_pdf_url"
+               value="{{ fianza.archivo_pdf_url if fianza else '' }}"
+               placeholder="https://...">
+    </div>
+
+    <div class="form-group">
+        <label>Observaciones</label>
+        <textarea name="observaciones" rows="4">{{ fianza.observaciones if fianza else '' }}</textarea>
+    </div>
+
+    {% if fianza %}
+    <div class="form-group">
+        <label>Estado</label>
+        <select name="estado">
+            <option value="vigente" {% if fianza.estado == 'vigente' %}selected{% endif %}>Vigente</option>
+            <option value="renovada" {% if fianza.estado == 'renovada' %}selected{% endif %}>Renovada (archivada)</option>
+            <option value="vencida" {% if fianza.estado == 'vencida' %}selected{% endif %}>Vencida</option>
+        </select>
+    </div>
+    {% endif %}
+
+    <div style="display:flex;gap:10px;margin-top:18px">
+        <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar
+        </button>
+        <a href="/cartas-fianza" class="btn">Cancelar</a>
+    </div>
+</form>
+
+{% endblock %}

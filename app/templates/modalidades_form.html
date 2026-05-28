@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% block title %}{{ 'Editar' if modalidad else 'Nueva' }} modalidad · PAZGUARD RRHH{% endblock %}
+{% block content %}
+
+<a href="/modalidades" style="font-size:.85rem">← Volver al listado</a>
+
+<h1 style="margin-top:14px">{{ 'Editar' if modalidad else 'Nueva' }} modalidad SUCAMEC</h1>
+<p class="subtitle">
+    {% if modalidad %}
+    Editar autorizacion <strong>{{ modalidad.nombre }}</strong>
+    {% else %}
+    Registrar nueva modalidad de servicio autorizada por SUCAMEC
+    {% endif %}
+</p>
+
+<form method="post" action="{{ '/modalidades/' + modalidad.id|string + '/editar' if modalidad else '/modalidades/nueva' }}" class="card">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Codigo *</label>
+            <select name="codigo" required>
+                {% for cod, nom in catalogo %}
+                <option value="{{ cod }}" {% if modalidad and modalidad.codigo == cod %}selected{% endif %}>{{ cod }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Nombre oficial *</label>
+            <input type="text" name="nombre" required value="{{ modalidad.nombre if modalidad else '' }}"
+                   placeholder="Ej: Vigilancia Privada">
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Resolucion SUCAMEC</label>
+            <input type="text" name="resolucion_sucamec"
+                   value="{{ modalidad.resolucion_sucamec if modalidad else '' }}"
+                   placeholder="Ej: RES-DG-N° 1234-2026">
+        </div>
+        <div class="form-group">
+            <label>Alcance geografico</label>
+            <input type="text" name="alcance_geografico"
+                   value="{{ modalidad.alcance_geografico if modalidad else '' }}"
+                   placeholder="Ej: Nacional / Lima Metropolitana">
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label>Fecha de otorgamiento</label>
+            <input type="date" name="fecha_otorgamiento"
+                   value="{{ modalidad.fecha_otorgamiento.strftime('%Y-%m-%d') if modalidad and modalidad.fecha_otorgamiento else '' }}">
+        </div>
+        <div class="form-group">
+            <label>Fecha de vencimiento</label>
+            <input type="date" name="fecha_vencimiento"
+                   value="{{ modalidad.fecha_vencimiento.strftime('%Y-%m-%d') if modalidad and modalidad.fecha_vencimiento else '' }}">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>URL del PDF de resolucion (Drive, Box, etc.)</label>
+        <input type="url" name="archivo_pdf_url"
+               value="{{ modalidad.archivo_pdf_url if modalidad else '' }}"
+               placeholder="https://...">
+    </div>
+
+    <div class="form-group">
+        <label>Observaciones</label>
+        <textarea name="observaciones" rows="4">{{ modalidad.observaciones if modalidad else '' }}</textarea>
+    </div>
+
+    {% if modalidad %}
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="activa" {% if modalidad.activa %}checked{% endif %} style="width:auto;margin-right:6px">
+            Modalidad activa
+        </label>
+    </div>
+    {% endif %}
+
+    <div style="display:flex;gap:10px;margin-top:18px">
+        <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-floppy-disk"></i> Guardar
+        </button>
+        <a href="/modalidades" class="btn">Cancelar</a>
+    </div>
+</form>
+
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}Modalidades SUCAMEC · PAZGUARD RRHH{% endblock %}
+{% block content %}
+
+<div class="flex-between" style="margin-bottom:18px">
+    <div>
+        <h1>Modalidades SUCAMEC</h1>
+        <p class="subtitle">Autorizaciones de servicio bajo DL 1213 + DS 005-2023-IN</p>
+    </div>
+    <a href="/modalidades/nueva" class="btn btn-primary">
+        <i class="fa-solid fa-plus"></i> Nueva modalidad
+    </a>
+</div>
+
+{% if modalidades %}
+<div class="card" style="padding:0;overflow:hidden">
+    <table>
+        <thead>
+            <tr>
+                <th>Codigo</th>
+                <th>Modalidad</th>
+                <th>Resolucion</th>
+                <th>Otorgada</th>
+                <th>Vence</th>
+                <th>Estado</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for m in modalidades %}
+            <tr>
+                <td class="mono">{{ m.codigo }}</td>
+                <td><strong>{{ m.nombre }}</strong>
+                    {% if m.alcance_geografico %}
+                    <div style="font-size:.78rem;color:var(--text-muted)">{{ m.alcance_geografico }}</div>
+                    {% endif %}
+                </td>
+                <td>{{ m.resolucion_sucamec or '—' }}</td>
+                <td class="mono">{{ m.fecha_otorgamiento.strftime('%d/%m/%Y') if m.fecha_otorgamiento else '—' }}</td>
+                <td class="mono">{{ m.fecha_vencimiento.strftime('%d/%m/%Y') if m.fecha_vencimiento else '—' }}</td>
+                <td>
+                    {% if not m.activa %}
+                    <span class="badge">inactiva</span>
+                    {% elif m.fecha_vencimiento %}
+                        {% set dias = (m.fecha_vencimiento - (m.creada_en|string)[:10]|trim).days if false else None %}
+                        {# Simplifico: dejo a la card del portal calcular dias #}
+                        <span class="badge badge-success">activa</span>
+                    {% else %}
+                        <span class="badge badge-success">activa</span>
+                    {% endif %}
+                </td>
+                <td><a href="/modalidades/{{ m.id }}" class="btn btn-sm">Ver</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:36px 22px">
+    <i class="fa-solid fa-shield-halved" style="font-size:48px;color:var(--text-muted);margin-bottom:14px"></i>
+    <h3 style="margin:0 0 6px">Sin modalidades registradas</h3>
+    <p style="margin:0 0 18px;color:var(--text-muted)">
+        Registra al menos la primera modalidad de servicio autorizada por SUCAMEC.
+    </p>
+    <a href="/modalidades/nueva" class="btn btn-primary">
+        <i class="fa-solid fa-plus"></i> Registrar primera modalidad
+    </a>
+</div>
+{% endif %}
+
+<p style="margin-top:24px;font-size:.82rem;color:var(--text-muted)">
+    <i class="fa-solid fa-circle-info"></i>
+    Catalogo SUCAMEC vigente: {{ catalogo|length }} modalidades disponibles.
+</p>
+
+{% endblock %}
