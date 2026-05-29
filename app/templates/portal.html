@@ -110,6 +110,21 @@
         </div>
     </a>
 
+    <a href="/planilla" class="card" style="text-decoration:none;color:inherit">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+            <div>
+                <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">Planilla {% if stats_planilla.periodo %}{{ stats_planilla.periodo }}{% endif %}</div>
+                {% if stats_planilla.periodo %}
+                <div style="font-size:1.5rem;font-weight:800;color:var(--accent);margin-top:6px">S/ {{ '{:,.0f}'.format(stats_planilla.costo_empresa) }}</div>
+                <div style="font-size:.85rem;color:var(--text-soft)">costo empresa · {{ stats_planilla.trabajadores }} trab.</div>
+                {% else %}
+                <div style="font-size:1.2rem;font-weight:800;color:var(--text-muted);margin-top:10px">Sin calcular</div>
+                {% endif %}
+            </div>
+            <i class="fa-solid fa-money-check-dollar" style="font-size:1.8rem;color:var(--accent-warm)"></i>
+        </div>
+    </a>
+
     <div class="card">
         <div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;font-weight:700">UIT {{ anio_uit }}</div>
         <div style="font-size:1.7rem;font-weight:800;color:var(--accent);margin-top:6px">S/ {{ '{:,.0f}'.format(uit_vigente) }}</div>
@@ -205,6 +220,9 @@
     </a>
     <a href="/armeria" class="btn">
         <i class="fa-solid fa-gun"></i> Armería
+    </a>
+    <a href="/planilla" class="btn">
+        <i class="fa-solid fa-money-check-dollar"></i> Planilla
     </a>
     <a href="/modalidades" class="btn">
         <i class="fa-solid fa-list"></i> Ver modalidades

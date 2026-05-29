@@ -15,7 +15,10 @@ except Exception:  # pragma: no cover
     _UNIQUE_EXC = Exception
 
 from app.services import database_rrhh as db_rrhh
-from app.config import TIPOS_VIGENCIA, HAB_HABILITADO, HAB_ATENCION, HAB_NO_HABILITADO
+from app.config import (
+    TIPOS_VIGENCIA, HAB_HABILITADO, HAB_ATENCION, HAB_NO_HABILITADO,
+    SISTEMAS_PENSION, AFP_CODIGOS,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -35,6 +38,15 @@ def _parse_date(s: str):
 
 def _solo_digitos(s: str) -> str:
     return ''.join(ch for ch in (s or '') if ch.isdigit())
+
+
+def _float(s, default=None):
+    if s is None or str(s).strip() == '':
+        return default
+    try:
+        return float(str(s).replace(',', '').strip())
+    except Exception:
+        return default
 
 
 @router.get('/personal')
@@ -70,6 +82,8 @@ async def form_nuevo(request: Request):
             'session': request.state.session,
             'proyecto_activo': request.state.proyecto_activo,
             'trabajador': None,
+            'sistemas_pension': SISTEMAS_PENSION,
+            'afp_codigos': AFP_CODIGOS,
         },
     )
 
@@ -90,6 +104,10 @@ async def crear(
     cargo_base: str = Form(''),
     foto_url: str = Form(''),
     observaciones: str = Form(''),
+    remuneracion_base: str = Form(''),
+    sistema_pensiones: str = Form(''),
+    afp_codigo: str = Form(''),
+    tiene_asig_familiar: str = Form(''),
 ):
     session = request.state.session
     dni_clean = _solo_digitos(dni)
@@ -117,6 +135,10 @@ async def crear(
             cargo_base=cargo_base.strip() or None,
             foto_url=foto_url.strip() or None,
             observaciones=observaciones.strip() or None,
+            remuneracion_base=_float(remuneracion_base),
+            sistema_pensiones=(sistema_pensiones.strip().upper() or None),
+            afp_codigo=(afp_codigo.strip().upper() or None),
+            tiene_asig_familiar=(tiene_asig_familiar.lower() == 'on'),
         )
     except _UNIQUE_EXC:
         return RedirectResponse(
@@ -164,6 +186,8 @@ async def form_editar(request: Request, dni: str):
             'session': request.state.session,
             'proyecto_activo': request.state.proyecto_activo,
             'trabajador': trabajador,
+            'sistemas_pension': SISTEMAS_PENSION,
+            'afp_codigos': AFP_CODIGOS,
         },
     )
 
@@ -184,6 +208,10 @@ async def editar(
     cargo_base: str = Form(''),
     foto_url: str = Form(''),
     observaciones: str = Form(''),
+    remuneracion_base: str = Form(''),
+    sistema_pensiones: str = Form(''),
+    afp_codigo: str = Form(''),
+    tiene_asig_familiar: str = Form(''),
 ):
     if not db_rrhh.get_trabajador(dni):
         raise HTTPException(status_code=404, detail='Trabajador no existe')
@@ -205,6 +233,10 @@ async def editar(
         cargo_base=cargo_base.strip() or None,
         foto_url=foto_url.strip() or None,
         observaciones=observaciones.strip() or None,
+        remuneracion_base=_float(remuneracion_base),
+        sistema_pensiones=(sistema_pensiones.strip().upper() or None),
+        afp_codigo=(afp_codigo.strip().upper() or None),
+        tiene_asig_familiar=(tiene_asig_familiar.lower() == 'on'),
     )
     return RedirectResponse(f'/personal/{dni}?ok={quote("Datos actualizados.")}', status_code=303)
 

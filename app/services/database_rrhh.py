@@ -220,6 +220,49 @@ SCHEMA_RRHH = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rrhh_municion_mov_lote ON rrhh_municion_movimiento(lote_id, fecha DESC)",
+
+    # ═══════════════ FASE 4.4: PLANILLA DL 728 + SCTR ═══════════════
+    # Campo aditivo a empleados_pazguard (lo gestiona RRHH): asignación
+    # familiar. remuneracion_base, sistema_pensiones y afp_codigo ya existen.
+    "ALTER TABLE empleados_pazguard ADD COLUMN IF NOT EXISTS tiene_asig_familiar BOOLEAN NOT NULL DEFAULT FALSE",
+
+    # Periodo de planilla (un mes/año). Una planilla por periodo.
+    """
+    CREATE TABLE IF NOT EXISTS rrhh_planilla_periodo (
+        id              SERIAL PRIMARY KEY,
+        anio            INTEGER NOT NULL,
+        mes             INTEGER NOT NULL,
+        estado          TEXT NOT NULL DEFAULT 'calculado',
+        fecha_calculo   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        calculado_por   INTEGER REFERENCES usuarios_global(id),
+        UNIQUE (anio, mes)
+    )
+    """,
+    # Detalle: una boleta por trabajador en el periodo (snapshot del cálculo).
+    """
+    CREATE TABLE IF NOT EXISTS rrhh_planilla_detalle (
+        id                  SERIAL PRIMARY KEY,
+        periodo_id          INTEGER NOT NULL REFERENCES rrhh_planilla_periodo(id) ON DELETE CASCADE,
+        dni                 TEXT NOT NULL REFERENCES empleados_pazguard(dni) ON DELETE CASCADE,
+        nombre_completo     TEXT,
+        sueldo_base         NUMERIC(12,2),
+        asig_familiar       NUMERIC(12,2),
+        total_ingresos      NUMERIC(12,2),
+        sistema_pension     TEXT,
+        desc_pension        NUMERIC(12,2),
+        total_descuentos    NUMERIC(12,2),
+        neto                NUMERIC(12,2),
+        essalud             NUMERIC(12,2),
+        sctr_salud          NUMERIC(12,2),
+        sctr_pension        NUMERIC(12,2),
+        provision_grati     NUMERIC(12,2),
+        provision_cts       NUMERIC(12,2),
+        provision_vacaciones NUMERIC(12,2),
+        costo_empresa       NUMERIC(12,2),
+        UNIQUE (periodo_id, dni)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rrhh_planilla_det_periodo ON rrhh_planilla_detalle(periodo_id)",
 ]
 
 
@@ -580,6 +623,8 @@ _CAMPOS_TRABAJADOR = (
     'tipo_documento', 'fecha_nacimiento', 'sexo', 'telefono', 'email',
     'direccion', 'fecha_ingreso', 'fecha_salida', 'cargo_base', 'foto_url',
     'observaciones',
+    # Fase 4.4: datos de planilla
+    'remuneracion_base', 'sistema_pensiones', 'afp_codigo', 'tiene_asig_familiar',
 )
 
 
@@ -1079,3 +1124,145 @@ def stats_armeria() -> dict:
         'asignadas': asignadas,
         'municion_saldo': int(muni),
     }
+
+
+# ═════════════════════════════════════════════════════════════
+# FASE 4.4 — PLANILLA DL 728 + SCTR
+# ═════════════════════════════════════════════════════════════
+
+class ReglaPlanilla(Exception):
+    """Violación de regla de negocio de planilla (mensaje para el usuario)."""
+
+
+def listar_periodos_planilla():
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM rrhh_planilla_periodo ORDER BY anio DESC, mes DESC"
+        ).fetchall()]
+
+
+def get_periodo_planilla(periodo_id: int):
+    with get_conn() as conn:
+        r = conn.execute(
+            "SELECT * FROM rrhh_planilla_periodo WHERE id = %s", (periodo_id,)
+        ).fetchone()
+        return dict(r) if r else None
+
+
+def detalle_planilla(periodo_id: int):
+    with get_conn() as conn:
+        return [dict(r) for r in conn.execute(
+            """SELECT * FROM rrhh_planilla_detalle
+               WHERE periodo_id = %s ORDER BY nombre_completo""",
+            (periodo_id,)
+        ).fetchall()]
+
+
+def get_boleta(detalle_id: int):
+    with get_conn() as conn:
+        r = conn.execute(
+            """SELECT d.*, p.anio, p.mes
+               FROM rrhh_planilla_detalle d
+               JOIN rrhh_planilla_periodo p ON p.id = d.periodo_id
+               WHERE d.id = %s""",
+            (detalle_id,)
+        ).fetchone()
+        return dict(r) if r else None
+
+
+def calcular_periodo_planilla(*, anio: int, mes: int, calculado_por=None) -> int:
+    """Calcula la planilla del periodo para todos los trabajadores activos con
+    remuneración definida. Idempotente: si el periodo existe, recalcula
+    (borra detalle previo y regenera). Retorna periodo_id.
+
+    Lanza ReglaPlanilla si no hay trabajadores con sueldo.
+    """
+    from app.config import planilla_params
+    from app.services.planilla_calc import calcular_boleta
+
+    if not (1 <= mes <= 12):
+        raise ReglaPlanilla("Mes inválido.")
+
+    params = planilla_params()
+    with get_conn() as conn:
+        trabajadores = conn.execute(
+            """SELECT dni, nombre_completo, remuneracion_base,
+                      sistema_pensiones, tiene_asig_familiar
+               FROM empleados_pazguard
+               WHERE fecha_salida IS NULL
+                 AND remuneracion_base IS NOT NULL
+                 AND remuneracion_base > 0"""
+        ).fetchall()
+        if not trabajadores:
+            raise ReglaPlanilla(
+                "No hay trabajadores activos con remuneración definida. "
+                "Asigna el sueldo base en la ficha de cada vigilante primero.")
+
+        # Crear o recuperar periodo
+        per = conn.execute(
+            """INSERT INTO rrhh_planilla_periodo (anio, mes, calculado_por)
+               VALUES (%s,%s,%s)
+               ON CONFLICT (anio, mes) DO UPDATE SET
+                 fecha_calculo = NOW(), calculado_por = EXCLUDED.calculado_por,
+                 estado = 'calculado'
+               RETURNING id""",
+            (anio, mes, calculado_por)
+        ).fetchone()
+        periodo_id = per['id']
+        # Limpiar detalle previo (recalculo)
+        conn.execute("DELETE FROM rrhh_planilla_detalle WHERE periodo_id = %s", (periodo_id,))
+
+        for t in trabajadores:
+            b = calcular_boleta(
+                sueldo_base=float(t['remuneracion_base']),
+                sistema_pension=t.get('sistema_pensiones') or 'ONP',
+                tiene_asig_familiar=bool(t.get('tiene_asig_familiar')),
+                params=params,
+            )
+            conn.execute(
+                """INSERT INTO rrhh_planilla_detalle
+                    (periodo_id, dni, nombre_completo, sueldo_base, asig_familiar,
+                     total_ingresos, sistema_pension, desc_pension, total_descuentos,
+                     neto, essalud, sctr_salud, sctr_pension, provision_grati,
+                     provision_cts, provision_vacaciones, costo_empresa)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (periodo_id, t['dni'], t['nombre_completo'], b['sueldo_base'],
+                 b['asig_familiar'], b['total_ingresos'], b['sistema_pension'],
+                 b['desc_pension'], b['total_descuentos'], b['neto'], b['essalud'],
+                 b['sctr_salud'], b['sctr_pension'], b['provision_grati'],
+                 b['provision_cts'], b['provision_vacaciones'], b['costo_empresa'])
+            )
+    return periodo_id
+
+
+def totales_planilla(periodo_id: int) -> dict:
+    with get_conn() as conn:
+        r = conn.execute(
+            """SELECT
+                 COUNT(*) AS trabajadores,
+                 COALESCE(SUM(total_ingresos),0) AS ingresos,
+                 COALESCE(SUM(neto),0) AS neto,
+                 COALESCE(SUM(essalud + sctr_salud + sctr_pension),0) AS aportes,
+                 COALESCE(SUM(provision_grati + provision_cts + provision_vacaciones),0) AS provisiones,
+                 COALESCE(SUM(costo_empresa),0) AS costo_empresa
+               FROM rrhh_planilla_detalle WHERE periodo_id = %s""",
+            (periodo_id,)
+        ).fetchone()
+        return {k: (float(v) if k != 'trabajadores' else int(v)) for k, v in dict(r).items()}
+
+
+def stats_planilla() -> dict:
+    """Costo del último periodo calculado (para el dashboard)."""
+    with get_conn() as conn:
+        ultimo = conn.execute(
+            "SELECT id, anio, mes FROM rrhh_planilla_periodo ORDER BY anio DESC, mes DESC LIMIT 1"
+        ).fetchone()
+        if not ultimo:
+            return {'periodo': None, 'costo_empresa': 0.0, 'trabajadores': 0}
+        tot = totales_planilla(ultimo['id'])
+        return {
+            'periodo': f"{ultimo['mes']:02d}/{ultimo['anio']}",
+            'periodo_id': ultimo['id'],
+            'costo_empresa': tot['costo_empresa'],
+            'trabajadores': tot['trabajadores'],
+        }

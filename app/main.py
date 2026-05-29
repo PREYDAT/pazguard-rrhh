@@ -194,7 +194,7 @@ async def favicon():
 
 # ── Routers ───────────────────────────────────────────────────
 
-from app.routes import portal, modalidades, fianzas, personal, armeria, auth_local
+from app.routes import portal, modalidades, fianzas, personal, armeria, planilla, auth_local
 
 app.include_router(auth_local.router)
 app.include_router(portal.router)
@@ -202,6 +202,7 @@ app.include_router(modalidades.router)
 app.include_router(fianzas.router)
 app.include_router(personal.router)
 app.include_router(armeria.router)
+app.include_router(planilla.router)
 
 
 # ── Exception handlers ────────────────────────────────────────

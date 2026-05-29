@@ -102,6 +102,42 @@
         <textarea name="observaciones" rows="3">{{ (trabajador.observaciones if trabajador else '') or '' }}</textarea>
     </div>
 
+    <h3 style="margin:22px 0 6px;border-top:1px solid var(--border);padding-top:18px">
+        <i class="fa-solid fa-money-check-dollar"></i> Datos de planilla (DL 728)
+    </h3>
+    <div class="form-row">
+        <div class="form-group">
+            <label>Remuneración base (S/)</label>
+            <input type="number" name="remuneracion_base" step="0.01" min="0"
+                   value="{{ trabajador.remuneracion_base if trabajador and trabajador.remuneracion_base else '' }}"
+                   placeholder="Ej: 1300.00">
+        </div>
+        <div class="form-group">
+            <label>Sistema de pensión</label>
+            <select name="sistema_pensiones">
+                <option value="">—</option>
+                {% for cod, nom in sistemas_pension %}
+                <option value="{{ cod }}" {% if trabajador and trabajador.sistema_pensiones == cod %}selected{% endif %}>{{ nom }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>AFP (si aplica)</label>
+            <select name="afp_codigo">
+                <option value="">—</option>
+                {% for a in afp_codigos %}
+                <option value="{{ a }}" {% if trabajador and trabajador.afp_codigo == a %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="tiene_asig_familiar" {% if trabajador and trabajador.tiene_asig_familiar %}checked{% endif %} style="width:auto;margin-right:6px">
+            Tiene asignación familiar (10% RMV — hijos menores o estudiando)
+        </label>
+    </div>
+
     <div style="display:flex;gap:10px;margin-top:18px">
         <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar</button>
         <a href="/personal" class="btn">Cancelar</a>

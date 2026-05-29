@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}Planilla {{ mes_nombre }} {{ periodo.anio }} · PAZGUARD RRHH{% endblock %}
+{% block content %}
+
+<a href="/planilla" style="font-size:.85rem">← Volver a planilla</a>
+<h1 style="margin-top:14px">Planilla · {{ mes_nombre }} {{ periodo.anio }}</h1>
+<p class="subtitle">{{ totales.trabajadores }} trabajador(es) · calculada {{ periodo.fecha_calculo.strftime('%d/%m/%Y %H:%M') }}</p>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px">
+    <div class="card" style="margin:0"><div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;font-weight:700">Neto a pagar</div><div style="font-size:1.5rem;font-weight:800;color:var(--accent)">S/ {{ '{:,.2f}'.format(totales.neto) }}</div></div>
+    <div class="card" style="margin:0"><div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;font-weight:700">Aportes empleador</div><div style="font-size:1.5rem;font-weight:800;color:var(--warning)">S/ {{ '{:,.2f}'.format(totales.aportes) }}</div></div>
+    <div class="card" style="margin:0"><div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;font-weight:700">Provisiones</div><div style="font-size:1.5rem;font-weight:800;color:var(--accent-cool)">S/ {{ '{:,.2f}'.format(totales.provisiones) }}</div></div>
+    <div class="card" style="margin:0;border:1px solid var(--accent)"><div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;font-weight:700">Costo total empresa</div><div style="font-size:1.5rem;font-weight:800;color:var(--danger)">S/ {{ '{:,.2f}'.format(totales.costo_empresa) }}</div></div>
+</div>
+
+<div class="card" style="padding:0;overflow:hidden">
+    <table>
+        <thead><tr><th>Trabajador</th><th>Sueldo</th><th>Ingresos</th><th>Desc.</th><th>Neto</th><th>EsSalud+SCTR</th><th>Costo</th><th></th></tr></thead>
+        <tbody>
+            {% for b in boletas %}
+            <tr>
+                <td>{{ b.nombre_completo }}<div style="font-size:.72rem;color:var(--text-muted)">{{ b.sistema_pension }}</div></td>
+                <td class="mono">{{ '{:,.0f}'.format(b.sueldo_base) }}</td>
+                <td class="mono">{{ '{:,.2f}'.format(b.total_ingresos) }}</td>
+                <td class="mono">{{ '{:,.2f}'.format(b.total_descuentos) }}</td>
+                <td class="mono"><strong>{{ '{:,.2f}'.format(b.neto) }}</strong></td>
+                <td class="mono">{{ '{:,.2f}'.format(b.essalud + b.sctr_salud + b.sctr_pension) }}</td>
+                <td class="mono">{{ '{:,.2f}'.format(b.costo_empresa) }}</td>
+                <td><a href="/planilla/boleta/{{ b.id }}" class="btn btn-sm">Boleta</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}

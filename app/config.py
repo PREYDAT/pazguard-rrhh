@@ -132,6 +132,42 @@ def estado_por_fecha(fecha_vencimiento: date) -> str:
     return ESTADO_VIGENTE
 
 
+# ── Fase 4.4: Planilla DL 728 + SCTR (parámetros legales Perú) ──
+# ⚠ SUPUESTOS estándar marzo 2026. AJUSTAR a la normativa vigente del
+# periodo y a las tasas reales de cada AFP/aseguradora SCTR. Todos
+# overridables por env var para no requerir redeploy de código.
+RMV = float(os.environ.get('RMV', '1130'))               # Remuneración Mínima Vital (proyectada 2026)
+ASIGNACION_FAMILIAR = RMV * 0.10                          # 10% RMV si tiene hijos
+
+ESSALUD_TASA = float(os.environ.get('ESSALUD_TASA', '0.09'))        # 9% empleador (salud)
+SCTR_SALUD_TASA = float(os.environ.get('SCTR_SALUD_TASA', '0.0153'))   # ~1.53% Riesgo III (varía x aseguradora)
+SCTR_PENSION_TASA = float(os.environ.get('SCTR_PENSION_TASA', '0.0163')) # ~1.63% Riesgo III
+ONP_TASA = float(os.environ.get('ONP_TASA', '0.13'))               # 13% descuento trabajador
+AFP_APORTE = float(os.environ.get('AFP_APORTE', '0.10'))           # 10% fondo
+AFP_COMISION_FLUJO = float(os.environ.get('AFP_COMISION', '0.0147'))  # ~1.47% (varía x AFP)
+AFP_PRIMA_SEGURO = float(os.environ.get('AFP_PRIMA', '0.0174'))    # ~1.74% prima seguro
+GRATI_BONIF_EXTRA = 0.09   # 9% bonificación extraordinaria sobre gratificación (Ley 30334)
+
+SISTEMAS_PENSION = [('ONP', 'ONP (13%)'), ('AFP', 'AFP'), ('SIN', 'Sin sistema')]
+AFP_CODIGOS = ['HABITAT', 'INTEGRA', 'PRIMA', 'PROFUTURO']
+
+
+def planilla_params() -> dict:
+    """Snapshot de los parámetros legales (para el motor de cálculo)."""
+    return {
+        'rmv': RMV,
+        'asignacion_familiar': ASIGNACION_FAMILIAR,
+        'essalud': ESSALUD_TASA,
+        'sctr_salud': SCTR_SALUD_TASA,
+        'sctr_pension': SCTR_PENSION_TASA,
+        'onp': ONP_TASA,
+        'afp_aporte': AFP_APORTE,
+        'afp_comision': AFP_COMISION_FLUJO,
+        'afp_prima': AFP_PRIMA_SEGURO,
+        'grati_bonif_extra': GRATI_BONIF_EXTRA,
+    }
+
+
 # ── Sistemas validos para SSO handover ────────────────────────
 SISTEMA_CODIGO = 'rrhh'  # cuando el hub llame /ir/rrhh, llega aqui
 

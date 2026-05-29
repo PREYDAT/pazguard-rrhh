@@ -28,6 +28,7 @@ async def portal(request: Request):
     stats = db_rrhh.stats_compliance()
     stats_personal = db_rrhh.stats_personal()
     stats_armeria = db_rrhh.stats_armeria()
+    stats_planilla = db_rrhh.stats_planilla()
     vencimientos = db_rrhh.vencimientos_proximos(dias_horizonte=90)
 
     # Semaforo global. Distingue documentos vencidos (modalidad/fianza) de
@@ -77,6 +78,7 @@ async def portal(request: Request):
             'stats': stats,
             'stats_personal': stats_personal,
             'stats_armeria': stats_armeria,
+            'stats_planilla': stats_planilla,
             'vencimientos': vencimientos[:10],  # top 10
             'vencimientos_total': len(vencimientos),
             'semaforo': semaforo,

@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block title %}Planilla · PAZGUARD RRHH{% endblock %}
+{% block content %}
+
+<div class="flex-between" style="margin-bottom:18px">
+    <div>
+        <h1>Planilla DL 728 + SCTR</h1>
+        <p class="subtitle">Cálculo mensual · SCTR Riesgo III · EsSalud · AFP/ONP · provisiones</p>
+    </div>
+</div>
+
+{% if error %}<div class="alert alert-error"><i class="fa-solid fa-triangle-exclamation"></i> {{ error }}</div>{% endif %}
+{% if ok %}<div class="alert alert-ok"><i class="fa-solid fa-circle-check"></i> {{ ok }}</div>{% endif %}
+
+<div class="card" style="border-left:4px solid var(--warning)">
+    <p style="margin:0;font-size:.85rem;color:var(--text-soft)">
+        <i class="fa-solid fa-circle-info"></i> <strong>Estimación referencial</strong> con parámetros de ley peruana
+        (RMV S/ {{ '{:,.0f}'.format(rmv) }}, EsSalud {{ '{:.0f}'.format(params.essalud*100) }}%,
+        SCTR salud {{ '{:.2f}'.format(params.sctr_salud*100) }}% + pensión {{ '{:.2f}'.format(params.sctr_pension*100) }}%,
+        ONP {{ '{:.0f}'.format(params.onp*100) }}%). Ajustables por variable de entorno. No reemplaza el PLAME oficial del contador.
+    </p>
+</div>
+
+<h2><i class="fa-solid fa-calculator"></i> Calcular nuevo periodo</h2>
+<form method="post" action="/planilla/generar" class="card">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token }}">
+    <div class="form-row">
+        <div class="form-group">
+            <label>Mes</label>
+            <select name="mes">
+                {% for i in range(1, 13) %}
+                <option value="{{ i }}" {% if i == mes_actual %}selected{% endif %}>{{ meses[i] }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Año</label>
+            <input type="number" name="anio" value="{{ anio_actual }}" min="2024" max="2100">
+        </div>
+        <div class="form-group" style="display:flex;align-items:flex-end">
+            <button type="submit" class="btn btn-primary" style="width:100%"><i class="fa-solid fa-gears"></i> Calcular planilla</button>
+        </div>
+    </div>
+</form>
+
+<h2 style="margin-top:28px"><i class="fa-solid fa-list"></i> Periodos calculados</h2>
+{% if periodos %}
+<div class="card" style="padding:0;overflow:hidden">
+    <table>
+        <thead><tr><th>Periodo</th><th>Trabajadores</th><th>Neto a pagar</th><th>Aportes</th><th>Costo empresa</th><th></th></tr></thead>
+        <tbody>
+            {% for p in periodos %}
+            <tr>
+                <td><strong>{{ p._mes_nombre }} {{ p.anio }}</strong></td>
+                <td class="mono">{{ p._tot.trabajadores }}</td>
+                <td class="mono">S/ {{ '{:,.2f}'.format(p._tot.neto) }}</td>
+                <td class="mono">S/ {{ '{:,.2f}'.format(p._tot.aportes) }}</td>
+                <td class="mono"><strong>S/ {{ '{:,.2f}'.format(p._tot.costo_empresa) }}</strong></td>
+                <td><a href="/planilla/{{ p.id }}" class="btn btn-sm">Ver</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card text-muted" style="text-align:center;padding:36px">
+    Aún no hay periodos calculados. Define el sueldo base de los vigilantes en su ficha y calcula el primer periodo arriba.
+</div>
+{% endif %}
+
+{% endblock %}

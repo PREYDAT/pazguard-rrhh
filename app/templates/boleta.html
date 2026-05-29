@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %}Boleta {{ b.nombre_completo }} · PAZGUARD RRHH{% endblock %}
+{% block content %}
+
+<a href="/planilla/{{ b.periodo_id }}" style="font-size:.85rem">← Volver a la planilla</a>
+
+<div class="card" style="max-width:680px;margin-top:14px">
+    <div class="flex-between" style="border-bottom:2px solid var(--accent);padding-bottom:12px;margin-bottom:16px">
+        <div>
+            <div style="font-weight:900;font-size:1.1rem;color:var(--accent)">BOLETA DE PAGO</div>
+            <div style="font-size:.8rem;color:var(--text-muted)">PAZGUARD SECURITY S.A.C.</div>
+        </div>
+        <div style="text-align:right">
+            <div style="font-weight:700">{{ mes_nombre }} {{ b.anio }}</div>
+            <div style="font-size:.8rem;color:var(--text-muted)">DL 728 · SCTR Riesgo III</div>
+        </div>
+    </div>
+
+    <div style="margin-bottom:16px">
+        <div style="font-weight:800;font-size:1.05rem">{{ b.nombre_completo }}</div>
+        <div style="font-size:.82rem;color:var(--text-muted)">DNI {{ b.dni }} · {{ b.sistema_pension }}</div>
+    </div>
+
+    <table style="margin-bottom:8px">
+        <tbody>
+            <tr><td style="font-weight:700;color:var(--success)" colspan="2">INGRESOS</td></tr>
+            <tr><td>Remuneración básica</td><td class="mono" style="text-align:right">{{ '{:,.2f}'.format(b.sueldo_base) }}</td></tr>
+            {% if b.asig_familiar and b.asig_familiar > 0 %}<tr><td>Asignación familiar</td><td class="mono" style="text-align:right">{{ '{:,.2f}'.format(b.asig_familiar) }}</td></tr>{% endif %}
+            <tr style="font-weight:700"><td>Total ingresos</td><td class="mono" style="text-align:right">{{ '{:,.2f}'.format(b.total_ingresos) }}</td></tr>
+
+            <tr><td style="font-weight:700;color:var(--danger);padding-top:14px" colspan="2">DESCUENTOS</td></tr>
+            <tr><td>Pensión ({{ b.sistema_pension }})</td><td class="mono" style="text-align:right">{{ '{:,.2f}'.format(b.desc_pension) }}</td></tr>
+            <tr style="font-weight:700"><td>Total descuentos</td><td class="mono" style="text-align:right">{{ '{:,.2f}'.format(b.total_descuentos) }}</td></tr>
+
+            <tr style="font-weight:900;font-size:1.05rem;border-top:2px solid var(--accent)">
+                <td style="padding-top:10px">NETO A PAGAR</td>
+                <td class="mono" style="text-align:right;padding-top:10px;color:var(--accent)">S/ {{ '{:,.2f}'.format(b.neto) }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="card" style="max-width:680px">
+    <div style="font-weight:700;font-size:.8rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Aportes del empleador (no se descuentan)</div>
+    <table>
+        <tbody>
+            <tr><td>EsSalud (9%)</td><td class="mono" style="text-align:right">{{ '{:,.2f}'.format(b.essalud) }}</td></tr>
+            <tr><td>SCTR Salud (Riesgo III)</td><td class="mono" style="text-align:right">{{ '{:,.2f}'.format(b.sctr_salud) }}</td></tr>
+            <tr><td>SCTR Pensión (Riesgo III)</td><td class="mono" style="text-align:right">{{ '{:,.2f}'.format(b.sctr_pension) }}</td></tr>
+            <tr><td style="padding-top:10px;font-weight:700;color:var(--text-muted)" colspan="2">PROVISIONES MENSUALES</td></tr>
+            <tr><td>Gratificación (+ bonif. 9%)</td><td class="mono" style="text-align:right">{{ '{:,.2f}'.format(b.provision_grati) }}</td></tr>
+            <tr><td>CTS</td><td class="mono" style="text-align:right">{{ '{:,.2f}'.format(b.provision_cts) }}</td></tr>
+            <tr><td>Vacaciones</td><td class="mono" style="text-align:right">{{ '{:,.2f}'.format(b.provision_vacaciones) }}</td></tr>
+            <tr style="font-weight:900;border-top:2px solid var(--border)">
+                <td style="padding-top:10px">COSTO TOTAL EMPRESA</td>
+                <td class="mono" style="text-align:right;padding-top:10px;color:var(--danger)">S/ {{ '{:,.2f}'.format(b.costo_empresa) }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}
